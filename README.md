@@ -9,7 +9,7 @@ A Foundry VTT module for running GM-controlled visual novel-style slideshows, sy
 - **Image slides** — display any image (Foundry paths or external URLs) with thumbnail previews in the editor
 - **HTML slides** — embed arbitrary HTML/CSS content in a sandboxed iframe
 - **Captions & speaker names** — multi-line caption bar with optional speaker tag and typewriter reveal effect
-- **Transitions** — a variety of standard and sand-themed canvas particle transitions
+- **Transitions** — a variety of standard and canvas particle transitions
 - **Ken Burns effect** — slow zoom or pan animations on image slides
 - **Per-slide audio** — attach a looping audio file to any slide
 - **Ambient particles** — continuous particle overlays per slide (snow, rain, embers, dust, fireflies)
@@ -33,7 +33,7 @@ A Foundry VTT module for running GM-controlled visual novel-style slideshows, sy
 Paste the following manifest URL into **Setup → Add-on Modules → Install Module → Manifest URL**:
 
 ```
-https://github.com/YourUser/sand-storyboard/releases/latest/download/module.json
+https://github.com/Adonminus/gm-storyboard/releases/latest/download/module.json
 ```
 
 ---
@@ -54,7 +54,7 @@ Click **Image Slide** or **HTML Slide**, then fill in:
 | **Image URL / HTML** | For images: a Foundry path or any URL (use the folder icon to browse). For HTML: paste full HTML markup. |
 | **Caption** | Multi-line narration text shown at the bottom of the screen. |
 | **Speaker** | Optional name shown above the caption (styled in gold). |
-| **Transition** | Choose from standard or sand-themed particle transitions. |
+| **Transition** | Choose from standard or thematic particle transitions. |
 | **Ken Burns** | (Image slides only) Slow zoom or pan animation. |
 | **Ambient** | Continuous particle overlay on the slide. |
 | **Audio** | Audio file that loops for the duration of the slide. |
