@@ -1,0 +1,30 @@
+{
+  "id": "sand-storyboard",
+  "title": "Sand Storyboard",
+  "description": "A visual novel-style slideshow controlled by the GM and synced to all players via socketlib. Supports images, HTML content, captions, and crossfade transitions.",
+  "version": "1.0.0",
+  "compatibility": {
+    "minimum": "13",
+    "verified": "13"
+  },
+  "authors": [
+    {
+      "name": "Custom Module"
+    }
+  ],
+  "esmodules": [
+    "scripts/main.js"
+  ],
+  "styles": [
+    "styles/storyboard.css"
+  ],
+  "dependencies": [
+    {
+      "id": "socketlib",
+      "type": "module",
+      "manifest": "https://github.com/manuelVo/foundryvtt-socketlib/releases/latest/download/module.json"
+    }
+  ],
+  "socket": true,
+  "flags": {}
+}

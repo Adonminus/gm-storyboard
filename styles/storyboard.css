@@ -1,0 +1,579 @@
+/* ═══════════════════════════════════════════
+   Sand Storyboard — Styles
+   ═══════════════════════════════════════════ */
+
+/* ─── Viewer Overlay ─── */
+
+#storyboard-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+/* ─── Blackout layer (for fade-to-black) ─── */
+
+#storyboard-viewer .sb-blackout {
+  position: absolute;
+  inset: 0;
+  background: #000;
+  opacity: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+
+#storyboard-viewer .sb-blackout.active {
+  opacity: 1;
+}
+
+/* ─── Slide Layers ─── */
+
+#storyboard-viewer .sb-slide-layer {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  z-index: 0;
+}
+
+#storyboard-viewer .sb-slide-layer.active {
+  opacity: 1;
+}
+
+/* Crossfade enter */
+#storyboard-viewer .sb-slide-layer.enter-crossfade {
+  transition: opacity 500ms ease;
+}
+
+/* Slide transitions — enter states (starting position before animating to default) */
+#storyboard-viewer .sb-slide-layer.enter-slide-left {
+  transform: translateX(100%);
+}
+#storyboard-viewer .sb-slide-layer.enter-slide-right {
+  transform: translateX(-100%);
+}
+#storyboard-viewer .sb-slide-layer.enter-slide-up {
+  transform: translateY(100%);
+}
+#storyboard-viewer .sb-slide-layer.enter-slide-down {
+  transform: translateY(-100%);
+}
+#storyboard-viewer .sb-slide-layer.enter-zoom-in {
+  transform: scale(0);
+  opacity: 0;
+}
+#storyboard-viewer .sb-slide-layer.enter-zoom-out {
+  transform: scale(2);
+  opacity: 0;
+}
+
+/* Active state with transitions for slide/zoom types */
+#storyboard-viewer .sb-slide-layer.active {
+  transform: translateX(0) translateY(0) scale(1);
+  transition: transform 500ms ease, opacity 500ms ease;
+}
+
+#storyboard-viewer .sb-slide-layer img {
+  width: 100vw;
+  height: 100vh;
+  object-fit: contain;
+  display: block;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+#storyboard-viewer .sb-slide-layer iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+/* ─── Transition Overlay (sand particle canvas) ─── */
+
+#storyboard-viewer .sb-transition-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  opacity: 0;
+}
+
+#storyboard-viewer .sb-transition-overlay canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ─── Caption Bar ─── */
+
+#storyboard-viewer .sb-caption-bar {
+  position: absolute;
+  bottom: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 80%;
+  max-width: 900px;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.85), rgba(0, 0, 0, 0.6));
+  border: 1px solid rgba(240, 192, 64, 0.25);
+  border-radius: 8px;
+  padding: 16px 24px;
+  z-index: 10;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+  text-align: center;
+}
+
+#storyboard-viewer .sb-caption-bar.visible {
+  opacity: 1;
+}
+
+#storyboard-viewer .sb-speaker {
+  display: block;
+  font-size: 0.85em;
+  font-weight: 700;
+  color: #f0c040;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 4px;
+  text-shadow: 0 0 8px rgba(240, 192, 64, 0.4);
+}
+
+#storyboard-viewer .sb-caption-text {
+  display: block;
+  font-size: 1.15em;
+  line-height: 1.5;
+  color: #eee;
+  font-family: "Palatino Linotype", "Book Antiqua", Palatino, serif;
+}
+
+/* ─── Progress Dots ─── */
+
+#storyboard-viewer .sb-progress-dots {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  z-index: 10;
+}
+
+#storyboard-viewer .sb-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.3);
+  transition: background 0.3s ease, transform 0.3s ease;
+}
+
+#storyboard-viewer .sb-dot.active {
+  background: #f0c040;
+  transform: scale(1.3);
+}
+
+/* ─── GM Controls ─── */
+
+#storyboard-viewer .sb-gm-controls {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  gap: 8px;
+  z-index: 10;
+}
+
+#storyboard-viewer .sb-gm-controls button {
+  padding: 8px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 6px;
+  background: rgba(30, 30, 30, 0.85);
+  color: #ddd;
+  font-size: 0.85em;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+  backdrop-filter: blur(4px);
+}
+
+#storyboard-viewer .sb-gm-controls button:hover {
+  background: rgba(60, 60, 60, 0.9);
+  border-color: rgba(255, 255, 255, 0.5);
+  color: #fff;
+}
+
+#storyboard-viewer .sb-end-btn {
+  border-color: rgba(229, 57, 53, 0.5) !important;
+  color: #ef9a9a !important;
+}
+
+#storyboard-viewer .sb-end-btn:hover {
+  background: rgba(229, 57, 53, 0.3) !important;
+  border-color: #e53935 !important;
+  color: #fff !important;
+}
+
+/* ═══════════════════════════════════════════
+   Editor Window
+   ═══════════════════════════════════════════ */
+
+.storyboard-editor .window-content {
+  padding: 0 !important;
+  background: #1e1e1e;
+  display: flex !important;
+  flex-direction: column;
+  overflow: hidden !important;
+}
+
+.sb-editor-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ─── Deck Selector Bar ─── */
+
+.sb-deck-bar {
+  display: flex;
+  gap: 4px;
+  padding: 6px 10px;
+  background: #1e1e1e;
+  border-bottom: 1px solid #3a3a3a;
+  flex-shrink: 0;
+  align-items: center;
+}
+
+.sb-deck-select {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 6px;
+  border: 1px solid #444 !important;
+  border-radius: 3px;
+  background: #2a2a2a !important;
+  color: #ddd !important;
+  font-size: 0.85em;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.sb-deck-select option {
+  background: #2a2a2a !important;
+  color: #ddd !important;
+}
+
+.sb-deck-select:focus {
+  border-color: #5c6bc0 !important;
+  outline: none;
+}
+
+.sb-deck-bar button {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #444;
+  border-radius: 3px;
+  background: #333;
+  color: #ccc;
+  font-size: 0.75em;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.sb-deck-bar button:hover {
+  background: #444;
+  border-color: #888;
+  color: #fff;
+}
+
+.sb-deck-bar .sb-deck-delete:hover {
+  color: #e53935;
+  border-color: rgba(229, 57, 53, 0.5);
+  background: rgba(229, 57, 53, 0.15);
+}
+
+/* ─── Toolbars ─── */
+
+.sb-toolbar {
+  display: flex;
+  gap: 6px;
+  padding: 8px 10px;
+  background: #252525;
+  flex-shrink: 0;
+}
+
+.sb-toolbar-top {
+  border-bottom: 1px solid #3a3a3a;
+}
+
+.sb-toolbar-bottom {
+  border-top: 1px solid #3a3a3a;
+  flex-wrap: wrap;
+}
+
+.sb-toolbar button {
+  padding: 6px 12px;
+  border: 1px solid #555;
+  border-radius: 4px;
+  background: #333;
+  color: #ddd;
+  font-size: 0.8em;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+
+.sb-toolbar button:hover {
+  background: #444;
+  border-color: #888;
+  color: #fff;
+}
+
+.sb-toolbar button i {
+  margin-right: 4px;
+}
+
+.sb-toolbar .sb-present {
+  background: #3949ab;
+  border-color: #5c6bc0;
+  color: #fff;
+}
+.sb-toolbar .sb-present:hover {
+  background: #5c6bc0;
+  border-color: #7986cb;
+}
+
+/* ─── Slide List (scrollable) ─── */
+
+.sb-slide-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px;
+  margin: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sb-empty {
+  text-align: center;
+  color: #777;
+  padding: 40px 16px;
+  font-style: italic;
+}
+
+/* ─── Slide Item ─── */
+
+.sb-slide-item {
+  background: #2a2a2a;
+  border: 1px solid #3a3a3a;
+  border-radius: 6px;
+  overflow: hidden;
+  flex-shrink: 0;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.sb-slide-item:hover {
+  border-color: #555;
+}
+
+.sb-slide-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: #333;
+  border-bottom: 1px solid #3a3a3a;
+}
+
+.sb-drag-handle {
+  cursor: grab;
+  color: #666;
+  font-size: 1em;
+  padding: 2px 4px;
+  transition: color 0.15s;
+}
+
+.sb-drag-handle:hover {
+  color: #aaa;
+}
+
+.sb-type-badge {
+  font-size: 0.65em;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 3px;
+  letter-spacing: 0.05em;
+}
+
+.sb-type-badge.image {
+  background: #2e7d32;
+  color: #c8e6c9;
+}
+
+.sb-type-badge.html {
+  background: #e65100;
+  color: #ffe0b2;
+}
+
+.sb-slide-num {
+  color: #888;
+  font-size: 0.8em;
+  flex: 1;
+}
+
+.sb-delete-slide {
+  background: none;
+  border: none;
+  color: #777;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 3px;
+  transition: color 0.15s, background 0.15s;
+}
+
+.sb-delete-slide:hover {
+  color: #e53935;
+  background: rgba(229, 57, 53, 0.15);
+}
+
+/* ─── Slide Fields ─── */
+
+.sb-slide-fields {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sb-slide-fields label {
+  display: block;
+  font-size: 0.7em;
+  color: #999;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 2px;
+}
+
+.sb-slide-fields input[type="text"],
+.sb-slide-fields textarea,
+.sb-slide-fields select {
+  width: 100%;
+  padding: 5px 6px;
+  border: 1px solid #444 !important;
+  border-radius: 3px;
+  background: #1a1a1a !important;
+  color: #ddd !important;
+  font-size: 0.85em;
+  font-family: inherit;
+  box-sizing: border-box;
+  transition: border-color 0.15s;
+}
+
+.sb-slide-fields input[type="text"]:focus,
+.sb-slide-fields textarea:focus,
+.sb-slide-fields select:focus {
+  border-color: #5c6bc0;
+  outline: none;
+}
+
+.sb-slide-fields select option {
+  background: #1a1a1a !important;
+  color: #ddd !important;
+}
+
+.sb-slide-fields textarea {
+  resize: vertical;
+  font-family: "Consolas", "Monaco", monospace;
+  font-size: 0.8em;
+}
+
+/* ─── Image URL + Browse Button ─── */
+
+.sb-image-field {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.sb-image-field input {
+  flex: 1;
+  min-width: 0;
+}
+
+.sb-browse-btn {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #444;
+  border-radius: 3px;
+  background: #333;
+  color: #ccc;
+  font-size: 0.8em;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.sb-browse-btn:hover {
+  background: #444;
+  border-color: #888;
+  color: #fff;
+}
+
+.sb-field-row {
+  display: flex;
+  gap: 8px;
+}
+
+.sb-field-group {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ─── Drag & Drop States ─── */
+
+.sb-slide-item.dragging {
+  opacity: 0.4;
+  border-style: dashed;
+}
+
+.sb-slide-item.drag-over {
+  border-color: #5c6bc0;
+  box-shadow: 0 0 0 2px rgba(92, 107, 188, 0.3);
+}
+
+/* ─── Scrollbar (WebKit) ─── */
+
+.sb-slide-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sb-slide-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sb-slide-list::-webkit-scrollbar-thumb {
+  background: #444;
+  border-radius: 3px;
+}
+
+.sb-slide-list::-webkit-scrollbar-thumb:hover {
+  background: #666;
+}
