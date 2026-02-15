@@ -1,4 +1,4 @@
-# Sand Storyboard
+# GM Storyboard
 
 A Foundry VTT module for running GM-controlled visual novel-style slideshows, synced to all players in real time via **socketlib**.
 
@@ -6,15 +6,18 @@ A Foundry VTT module for running GM-controlled visual novel-style slideshows, sy
 
 ## Features
 
-- **Image slides** — display any image (Foundry paths or external URLs)
+- **Image slides** — display any image (Foundry paths or external URLs) with thumbnail previews in the editor
 - **HTML slides** — embed arbitrary HTML/CSS content in a sandboxed iframe
-- **Captions & speaker names** — styled caption bar with optional speaker tag
-- **Crossfade or instant transitions** — per-slide setting
-- **GM controls** — Prev/Next buttons + keyboard arrows, the GM is the only one who can advance slides
-- **Fully synced** — all connected players see the exact same slide at the same moment via socketlib
-- **Drag-to-reorder** slides in the editor
-- **Import/Export JSON** — save and reload your slide decks
-- **Progress dots** — visible indicator of position in the sequence
+- **Captions & speaker names** — multi-line caption bar with optional speaker tag and typewriter reveal effect
+- **Transitions** — a variety of standard and sand-themed canvas particle transitions
+- **Ken Burns effect** — slow zoom or pan animations on image slides
+- **Per-slide audio** — attach a looping audio file to any slide
+- **Ambient particles** — continuous particle overlays per slide (snow, rain, embers, dust, fireflies)
+- **Multiple decks** — create, rename, and delete separate storyboard decks
+- **GM controls** — Prev/Next/End buttons + keyboard arrows, with progress dots
+- **Fully synced** — all connected players see the exact same slide via socketlib, with late-join support
+- **Sidebar toggle** — open Foundry's sidebar during a presentation (chat, journals, etc.) without leaving the slideshow
+- **Drag-to-reorder** and **duplicate** slides in the editor
 
 ---
 
@@ -27,17 +30,11 @@ A Foundry VTT module for running GM-controlled visual novel-style slideshows, sy
 
 ## Installation
 
-### Option A — Manual (recommended for local/custom modules)
+Paste the following manifest URL into **Setup → Add-on Modules → Install Module → Manifest URL**:
 
-1. Copy the `sand-storyboard/` folder into your Foundry `Data/modules/` directory.
-2. Restart Foundry (or reload modules).
-3. Enable **Sand Storyboard** in your world's module settings.
-4. Enable **socketlib** as well (it will be listed as a dependency).
-
-### Option B — Via manifest URL
-
-If you host `module.json` somewhere, you can paste its URL into
-**Setup → Add-on Modules → Install Module → Manifest URL**.
+```
+https://github.com/YourUser/sand-storyboard/releases/latest/download/module.json
+```
 
 ---
 
@@ -45,8 +42,8 @@ If you host `module.json` somewhere, you can paste its URL into
 
 ### Opening the Editor (GM only)
 
-1. Click the **film icon** button in the Token Controls toolbar on the left side of the canvas.
-2. The **Sand Storyboard** editor window opens.
+1. Select the **Journal Notes** tool group in the left toolbar, then click the **film icon** in the sub-toolbar.
+2. The **GM Storyboard** editor window opens.
 
 ### Adding Slides
 
@@ -54,55 +51,35 @@ Click **Image Slide** or **HTML Slide**, then fill in:
 
 | Field | Description |
 |-------|-------------|
-| **Image URL / HTML** | For images: a Foundry path like `modules/my-module/img/scene.webp` or any URL. For HTML: paste full HTML markup. |
-| **Caption** | Narration text shown at the bottom of the screen. |
+| **Image URL / HTML** | For images: a Foundry path or any URL (use the folder icon to browse). For HTML: paste full HTML markup. |
+| **Caption** | Multi-line narration text shown at the bottom of the screen. |
 | **Speaker** | Optional name shown above the caption (styled in gold). |
-| **Transition** | Crossfade (smooth) or Instant. |
+| **Transition** | Choose from standard or sand-themed particle transitions. |
+| **Ken Burns** | (Image slides only) Slow zoom or pan animation. |
+| **Ambient** | Continuous particle overlay on the slide. |
+| **Audio** | Audio file that loops for the duration of the slide. |
+| **Typewriter** | Enable to reveal caption text character-by-character. |
 
-You can **drag** slides to reorder them.
+You can **drag** slides to reorder them, or click the **clone icon** to duplicate a slide.
 
 ### Presenting
 
 1. Click **Present to Players** — all connected players immediately see the first slide.
-2. Use **Next / Prev** buttons or keyboard **→ / ← / Space / Escape** to control the slideshow.
+2. Use **Next / Prev** buttons or keyboard **arrow keys** to control the slideshow.
 3. Click **End** (or press **Escape**) to close it for everyone.
+4. Players who join mid-presentation automatically sync to the current slide.
+
+### Sidebar Access
+
+During a presentation, click the **chevron tab** on the right edge of the screen to open Foundry's sidebar (chat, combat tracker, journals, etc.). Click again to close it. Works for both GM and players. Foundry windows opened from the sidebar appear above the storyboard.
 
 ### Preview (GM only)
 
 Click **Preview** to open the slideshow locally without broadcasting to players — useful for checking your slides before going live.
 
-### Import / Export
+### Multiple Decks
 
-Use **Export** to save your slide deck as a `.json` file.
-Use **Import** to reload it in any world.
-
----
-
-## HTML Slides
-
-HTML slides are rendered in a sandboxed `<iframe>` (`sandbox="allow-scripts allow-same-origin"`).
-You can use inline CSS, embedded images (`<img src="...">`), and JavaScript within the frame.
-
-**Example HTML slide content:**
-```html
-<!DOCTYPE html>
-<html>
-<head>
-<style>
-  body { margin:0; background:#1a1a2e; color:#eee; font-family:'Palatino Linotype',serif;
-         display:flex; align-items:center; justify-content:center; height:100vh; text-align:center; }
-  h1 { font-size:3em; color:#f0c040; text-shadow: 0 0 20px rgba(240,192,64,0.5); }
-  p  { font-size:1.3em; max-width:600px; }
-</style>
-</head>
-<body>
-  <div>
-    <h1>Chapter II</h1>
-    <p>The city of Araveth lay in ruins, its towers fallen to shadow...</p>
-  </div>
-</body>
-</html>
-```
+Use the dropdown at the top of the editor to switch between storyboard decks. The **+** button creates a new deck, the **pen** icon renames it, and the **trash** icon deletes it.
 
 ---
 
@@ -110,22 +87,9 @@ You can use inline CSS, embedded images (`<img src="...">`), and JavaScript with
 
 | Key | Action |
 |-----|--------|
-| `→` / `↓` / `Space` | Next slide |
+| `→` / `↓` | Next slide |
 | `←` / `↑` | Previous slide |
 | `Escape` | End slideshow for everyone |
-
----
-
-## File Structure
-
-```
-sand-storyboard/
-├── module.json          ← Foundry manifest
-├── scripts/
-│   └── main.js          ← All module logic
-└── styles/
-    └── storyboard.css   ← Viewer & editor styles
-```
 
 ---
 

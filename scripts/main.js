@@ -1,5 +1,5 @@
 /**
- * Sand Storyboard
+ * GM Storyboard
  * A visual-novel-style synced slideshow for Foundry VTT v13
  * Requires: socketlib
  */
@@ -14,6 +14,9 @@ let socket;
 let editorApp = null;
 let viewerEl = null;
 let activeLayer = "a";
+let _currentAudio = null;
+let _typewriterTimer = null;
+const TYPEWRITER_SPEED = 35;
 
 const TRANSITIONS = {
   instant:          "Instant",
@@ -33,6 +36,27 @@ const TRANSITIONS = {
 };
 
 const OVERLAY_TRANSITIONS = ["sand-wipe", "sandstorm", "golden-mist", "desert-wind", "ancient-reveal"];
+
+const KEN_BURNS_OPTIONS = {
+  none:        "None",
+  "zoom-in":   "Slow Zoom In",
+  "zoom-out":  "Slow Zoom Out",
+  "pan-left":  "Pan Left",
+  "pan-right": "Pan Right",
+  random:      "Random"
+};
+
+const AMBIENT_PARTICLE_OPTIONS = {
+  none:      "None",
+  snow:      "Snow",
+  rain:      "Rain",
+  embers:    "Embers",
+  dust:      "Dust",
+  fireflies: "Fireflies"
+};
+
+let _ambientRaf = null;
+let _ambientParticles = [];
 
 const presentation = {
   active: false,
@@ -65,7 +89,7 @@ Hooks.once("socketlib.ready", () => {
 
 Hooks.once("ready", () => {
   if (!game.modules.get("socketlib")?.active) {
-    ui.notifications.error("Sand Storyboard requires the socketlib module. Please enable it.");
+    ui.notifications.error("GM Storyboard requires the socketlib module. Please enable it.");
   }
   if (game.user.isGM) {
     game.sandStoryboard = {
@@ -85,29 +109,20 @@ Hooks.once("ready", () => {
 
 Hooks.on("getSceneControlButtons", controls => {
   if (!game.user.isGM) return;
-
-  const tool = {
+  const group = controls.notes ?? controls.journal;
+  if (!group?.tools) return;
+  group.tools["sand-storyboard"] = {
     name: "sand-storyboard",
-    title: "Sand Storyboard",
+    title: "GM Storyboard",
     icon: "fas fa-film",
-    visible: game.user.isGM,
+    order: 100,
     button: true,
-    onClick: () => {
+    visible: true,
+    onChange: () => {
       if (!editorApp) editorApp = new StoryboardEditor();
       editorApp.render(true);
     }
   };
-
-  if (Array.isArray(controls)) {
-    const group = controls.find(c => c.name === "token" || c.name === "tokens");
-    if (group?.tools) group.tools.push(tool);
-  } else {
-    const group = controls.token ?? controls.tokens;
-    if (group?.tools) {
-      if (Array.isArray(group.tools)) group.tools.push(tool);
-      else group.tools[tool.name] = tool;
-    }
-  }
 });
 
 /* ═══════════════════════════════════════════
@@ -369,6 +384,151 @@ function _runSandTransition(overlay, type, onPeak, onDone) {
 }
 
 /* ═══════════════════════════════════════════
+   Ambient Particles
+   ═══════════════════════════════════════════ */
+
+function _stopAmbientParticles() {
+  if (_ambientRaf) { cancelAnimationFrame(_ambientRaf); _ambientRaf = null; }
+  _ambientParticles = [];
+  if (viewerEl) {
+    const c = viewerEl.querySelector(".sb-ambient-canvas");
+    if (c) c.getContext("2d").clearRect(0, 0, c.width, c.height);
+  }
+}
+
+function _startAmbientParticles(type) {
+  _stopAmbientParticles();
+  if (!type || type === "none" || !viewerEl) return;
+
+  const canvas = viewerEl.querySelector(".sb-ambient-canvas");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width = window.innerWidth;
+  const H = canvas.height = window.innerHeight;
+  const PI2 = Math.PI * 2;
+  const N = { snow: 150, rain: 200, embers: 120, dust: 140, fireflies: 80 }[type] || 150;
+
+  for (let i = 0; i < N; i++) {
+    const p = { x: Math.random() * W, y: Math.random() * H };
+    if (type === "snow") {
+      p.r = 1.5 + Math.random() * 3;
+      p.vy = 0.3 + Math.random() * 1.2;
+      p.vx = (Math.random() - 0.5) * 0.5;
+      p.drift = Math.random() * PI2;
+      p.a = 0.4 + Math.random() * 0.5;
+    } else if (type === "rain") {
+      p.len = 8 + Math.random() * 16;
+      p.vy = 6 + Math.random() * 10;
+      p.vx = -1 - Math.random() * 2;
+      p.a = 0.15 + Math.random() * 0.3;
+    } else if (type === "embers") {
+      p.r = 1 + Math.random() * 2.5;
+      p.vy = -(0.5 + Math.random() * 1.5);
+      p.vx = (Math.random() - 0.5) * 0.8;
+      p.drift = Math.random() * PI2;
+      p.a = 0.5 + Math.random() * 0.5;
+      p.life = Math.random();
+    } else if (type === "dust") {
+      p.r = 1 + Math.random() * 2;
+      p.vx = (Math.random() - 0.5) * 0.4;
+      p.vy = (Math.random() - 0.5) * 0.3;
+      p.drift = Math.random() * PI2;
+      p.a = 0.2 + Math.random() * 0.35;
+    } else if (type === "fireflies") {
+      p.r = 2 + Math.random() * 2;
+      p.angle = Math.random() * PI2;
+      p.speed = 0.2 + Math.random() * 0.5;
+      p.pulse = Math.random() * PI2;
+      p.a = 0.4 + Math.random() * 0.6;
+    }
+    _ambientParticles.push(p);
+  }
+
+  let lastTime = 0;
+  function frame(ts) {
+    const dt = lastTime ? (ts - lastTime) / 16.67 : 1;
+    lastTime = ts;
+    ctx.clearRect(0, 0, W, H);
+
+    for (const p of _ambientParticles) {
+      if (type === "snow") {
+        p.drift += 0.01 * dt;
+        p.x += (p.vx + Math.sin(p.drift) * 0.5) * dt;
+        p.y += p.vy * dt;
+        if (p.y > H + 10) { p.y = -10; p.x = Math.random() * W; }
+        if (p.x < -10) p.x = W + 10;
+        if (p.x > W + 10) p.x = -10;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, PI2);
+        ctx.fillStyle = `rgba(255,255,255,${p.a})`;
+        ctx.fill();
+      } else if (type === "rain") {
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        if (p.y > H + 20) { p.y = -20; p.x = Math.random() * W; }
+        ctx.strokeStyle = `rgba(170,190,210,${p.a})`;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(p.x + p.vx * 0.5, p.y + p.len);
+        ctx.stroke();
+      } else if (type === "embers") {
+        p.drift += 0.015 * dt;
+        p.x += (p.vx + Math.sin(p.drift) * 0.6) * dt;
+        p.y += p.vy * dt;
+        p.life += 0.005 * dt;
+        if (p.y < -10) { p.y = H + 10; p.x = Math.random() * W; p.life = Math.random(); }
+        const br = 0.5 + Math.sin(p.life * 6) * 0.5;
+        const r = 220 + Math.floor(br * 35);
+        const g = 80 + Math.floor(br * 60);
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, PI2);
+        ctx.fillStyle = `rgba(${r},${g},20,${p.a * br})`;
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r * 2.5, 0, PI2);
+        ctx.fillStyle = `rgba(${r},${g},20,${p.a * br * 0.15})`;
+        ctx.fill();
+      } else if (type === "dust") {
+        p.drift += 0.008 * dt;
+        p.x += (p.vx + Math.sin(p.drift) * 0.2) * dt;
+        p.y += (p.vy + Math.cos(p.drift * 0.7) * 0.15) * dt;
+        if (p.x < -10) p.x = W + 10;
+        if (p.x > W + 10) p.x = -10;
+        if (p.y < -10) p.y = H + 10;
+        if (p.y > H + 10) p.y = -10;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, PI2);
+        ctx.fillStyle = `rgba(210,190,140,${p.a})`;
+        ctx.fill();
+      } else if (type === "fireflies") {
+        p.pulse += 0.03 * dt;
+        p.angle += (Math.random() - 0.5) * 0.15 * dt;
+        p.x += Math.cos(p.angle) * p.speed * dt;
+        p.y += Math.sin(p.angle) * p.speed * dt;
+        if (p.x < -20) p.x = W + 20;
+        if (p.x > W + 20) p.x = -20;
+        if (p.y < -20) p.y = H + 20;
+        if (p.y > H + 20) p.y = -20;
+        const glow = 0.3 + Math.sin(p.pulse) * 0.7;
+        const alpha = p.a * Math.max(glow, 0);
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r * 0.5, 0, PI2);
+        ctx.fillStyle = `rgba(200,240,80,${alpha})`;
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r * 3, 0, PI2);
+        ctx.fillStyle = `rgba(180,220,60,${alpha * 0.12})`;
+        ctx.fill();
+      }
+    }
+
+    _ambientRaf = requestAnimationFrame(frame);
+  }
+  _ambientRaf = requestAnimationFrame(frame);
+}
+
+/* ═══════════════════════════════════════════
    Viewer
    ═══════════════════════════════════════════ */
 
@@ -380,9 +540,13 @@ function _createViewer() {
     <div class="sb-transition-overlay"></div>
     <div class="sb-slide-layer sb-layer-a"></div>
     <div class="sb-slide-layer sb-layer-b"></div>
+    <canvas class="sb-ambient-canvas"></canvas>
     <div class="sb-caption-bar">
       <span class="sb-speaker"></span>
       <span class="sb-caption-text"></span>
+    </div>
+    <div class="sb-sidebar-area">
+      <button class="sb-sidebar-toggle" title="Toggle sidebar"><i class="fas fa-chevron-left"></i></button>
     </div>
     ${game.user.isGM ? `
     <div class="sb-progress-dots"></div>
@@ -393,6 +557,23 @@ function _createViewer() {
     </div>` : ""}
   `;
   document.body.appendChild(viewerEl);
+  document.body.classList.add("sb-presenting");
+
+  viewerEl.querySelector(".sb-sidebar-toggle").addEventListener("click", () => {
+    const sidebar = document.getElementById("sidebar");
+    if (!sidebar) return;
+    const area = viewerEl.querySelector(".sb-sidebar-area");
+    const isInViewer = area.contains(sidebar);
+    if (isInViewer) {
+      sidebar.classList.remove("sb-in-viewer");
+      document.getElementById("ui-right")?.appendChild(sidebar);
+      document.body.classList.remove("sb-sidebar-visible");
+    } else {
+      area.appendChild(sidebar);
+      sidebar.classList.add("sb-in-viewer");
+      document.body.classList.add("sb-sidebar-visible");
+    }
+  });
 
   if (game.user.isGM) {
     viewerEl.querySelector(".sb-prev-btn").addEventListener("click", prevSlide);
@@ -409,6 +590,12 @@ function _setLayerContent(layer, slide) {
     const img = document.createElement("img");
     img.src = slide.content;
     img.alt = "slide";
+    let kb = slide.kenBurns || "none";
+    if (kb === "random") {
+      const choices = ["zoom-in", "zoom-out", "pan-left", "pan-right"];
+      kb = choices[Math.floor(Math.random() * choices.length)];
+    }
+    if (kb !== "none") img.classList.add(`sb-kb-${kb}`);
     layer.appendChild(img);
   } else {
     const iframe = document.createElement("iframe");
@@ -491,7 +678,9 @@ function _renderViewer(slide, index, total) {
 
   activeLayer = activeLayer === "a" ? "b" : "a";
 
-  // Caption
+  // Caption (with typewriter support)
+  if (_typewriterTimer) { clearInterval(_typewriterTimer); _typewriterTimer = null; }
+
   const bar = viewerEl.querySelector(".sb-caption-bar");
   const speakerEl = bar.querySelector(".sb-speaker");
   const captionEl = bar.querySelector(".sb-caption-text");
@@ -499,10 +688,36 @@ function _renderViewer(slide, index, total) {
     bar.classList.add("visible");
     speakerEl.textContent = slide.speaker || "";
     speakerEl.style.display = slide.speaker ? "" : "none";
-    captionEl.textContent = slide.caption || "";
+    const fullCaption = slide.caption || "";
+    if (slide.typewriter && fullCaption.length > 0) {
+      captionEl.textContent = "";
+      let charIdx = 0;
+      _typewriterTimer = setInterval(() => {
+        charIdx++;
+        captionEl.textContent = fullCaption.substring(0, charIdx);
+        if (charIdx >= fullCaption.length) {
+          clearInterval(_typewriterTimer);
+          _typewriterTimer = null;
+        }
+      }, TYPEWRITER_SPEED);
+    } else {
+      captionEl.textContent = fullCaption;
+    }
   } else {
     bar.classList.remove("visible");
   }
+
+  // Audio
+  if (_currentAudio) { _currentAudio.pause(); _currentAudio.currentTime = 0; _currentAudio = null; }
+  if (slide.audio) {
+    _currentAudio = new Audio(slide.audio);
+    _currentAudio.volume = 0.8;
+    _currentAudio.loop = true;
+    _currentAudio.play().catch(() => {});
+  }
+
+  // Ambient particles
+  _startAmbientParticles(slide.ambientParticles || "none");
 
   // Progress dots (GM only)
   const dots = viewerEl.querySelector(".sb-progress-dots");
@@ -515,13 +730,26 @@ function _renderViewer(slide, index, total) {
 
 function _destroyViewer() {
   if (game.user.isGM) document.removeEventListener("keydown", _viewerKeyHandler);
+  if (_typewriterTimer) { clearInterval(_typewriterTimer); _typewriterTimer = null; }
+  if (_currentAudio) { _currentAudio.pause(); _currentAudio.currentTime = 0; _currentAudio = null; }
+  _stopAmbientParticles();
+  // Restore sidebar to its original parent before removing the viewer
+  if (viewerEl) {
+    const sidebar = viewerEl.querySelector("#sidebar");
+    if (sidebar) {
+      sidebar.classList.remove("sb-in-viewer");
+      document.getElementById("ui-right")?.appendChild(sidebar);
+    }
+  }
+  document.body.classList.remove("sb-sidebar-visible");
+  document.body.classList.remove("sb-presenting");
   if (viewerEl) { viewerEl.remove(); viewerEl = null; }
 }
 
 function _viewerKeyHandler(e) {
   if (!presentation.active) return;
   switch (e.key) {
-    case "ArrowRight": case "ArrowDown": case " ":
+    case "ArrowRight": case "ArrowDown":
       e.preventDefault(); nextSlide(); break;
     case "ArrowLeft": case "ArrowUp":
       e.preventDefault(); prevSlide(); break;
@@ -568,7 +796,7 @@ class StoryboardEditor extends Application {
   static get defaultOptions() {
     return foundry.utils.mergeObject(super.defaultOptions, {
       id: "storyboard-editor",
-      title: "Sand Storyboard",
+      title: "GM Storyboard",
       classes: ["storyboard-editor"],
       width: 540,
       height: 660,
@@ -734,6 +962,12 @@ class StoryboardEditor extends Application {
     const transitionOpts = Object.entries(TRANSITIONS).map(([val, label]) =>
       `<option value="${val}" ${slide.transition === val ? "selected" : ""}>${label}</option>`
     ).join("");
+    const kenBurnsOpts = Object.entries(KEN_BURNS_OPTIONS).map(([val, label]) =>
+      `<option value="${val}" ${(slide.kenBurns || "none") === val ? "selected" : ""}>${label}</option>`
+    ).join("");
+    const particleOpts = Object.entries(AMBIENT_PARTICLE_OPTIONS).map(([val, label]) =>
+      `<option value="${val}" ${(slide.ambientParticles || "none") === val ? "selected" : ""}>${label}</option>`
+    ).join("");
 
     const contentField = isImage
       ? `<div class="sb-image-field">
@@ -747,12 +981,22 @@ class StoryboardEditor extends Application {
       : `<textarea class="sb-field-content" data-idx="${idx}" rows="3"
            placeholder="&lt;html&gt;...&lt;/html&gt;">${_escapeHtml(slide.content)}</textarea>`;
 
+    const thumbnailHtml = isImage
+      ? `<div class="sb-thumbnail-preview" data-idx="${idx}"
+           style="${slide.content ? "" : "display:none"}">
+           <img src="${_escapeHtml(slide.content)}" alt="preview" />
+         </div>`
+      : "";
+
     return `
       <li class="sb-slide-item" data-idx="${idx}" draggable="true">
         <div class="sb-slide-header">
           <span class="sb-drag-handle" title="Drag to reorder"><i class="fas fa-grip-vertical"></i></span>
           <span class="sb-type-badge ${slide.type}">${isImage ? "IMG" : "HTML"}</span>
           <span class="sb-slide-num">#${idx + 1}</span>
+          <button class="sb-duplicate-slide" data-idx="${idx}" title="Duplicate slide">
+            <i class="fas fa-clone"></i>
+          </button>
           <button class="sb-delete-slide" data-idx="${idx}" title="Delete slide">
             <i class="fas fa-trash"></i>
           </button>
@@ -760,24 +1004,56 @@ class StoryboardEditor extends Application {
         <div class="sb-slide-fields">
           <label>${isImage ? "Image URL" : "HTML Content"}</label>
           ${contentField}
+          ${thumbnailHtml}
           <div class="sb-field-row">
-            <div class="sb-field-group">
-              <label>Caption</label>
-              <input type="text" class="sb-field-caption" data-idx="${idx}"
-                value="${_escapeHtml(slide.caption)}" placeholder="Narration text..." />
-            </div>
             <div class="sb-field-group">
               <label>Speaker</label>
               <input type="text" class="sb-field-speaker" data-idx="${idx}"
                 value="${_escapeHtml(slide.speaker)}" placeholder="Character name" />
             </div>
           </div>
+          <label>Caption</label>
+          <textarea class="sb-field-caption" data-idx="${idx}" rows="3"
+            placeholder="Narration text...">${_escapeHtml(slide.caption)}</textarea>
           <div class="sb-field-row">
             <div class="sb-field-group">
               <label>Transition</label>
               <select class="sb-field-transition" data-idx="${idx}">
                 ${transitionOpts}
               </select>
+            </div>
+            ${isImage ? `<div class="sb-field-group">
+              <label>Ken Burns</label>
+              <select class="sb-field-kenburns" data-idx="${idx}">
+                ${kenBurnsOpts}
+              </select>
+            </div>` : ""}
+            <div class="sb-field-group">
+              <label>Ambient</label>
+              <select class="sb-field-particles" data-idx="${idx}">
+                ${particleOpts}
+              </select>
+            </div>
+          </div>
+          <div class="sb-field-row">
+            <div class="sb-field-group" style="flex:3">
+              <label>Audio</label>
+              <div class="sb-audio-field">
+                <input type="text" class="sb-field-audio" data-idx="${idx}"
+                  value="${_escapeHtml(slide.audio || "")}"
+                  placeholder="Audio file path..." />
+                <button class="sb-browse-audio-btn" data-idx="${idx}" title="Browse audio">
+                  <i class="fas fa-music"></i>
+                </button>
+              </div>
+            </div>
+            <div class="sb-field-group" style="flex:1">
+              <label>Typewriter</label>
+              <label class="sb-checkbox-label">
+                <input type="checkbox" class="sb-field-typewriter" data-idx="${idx}"
+                  ${slide.typewriter ? "checked" : ""} />
+                <span>Enabled</span>
+              </label>
             </div>
           </div>
         </div>
@@ -803,7 +1079,7 @@ class StoryboardEditor extends Application {
     html.find(".sb-present").on("click", () => this._present(false));
     html.find(".sb-preview").on("click", () => this._present(true));
 
-    // FilePicker
+    // FilePicker (image)
     html.find(".sb-browse-btn").on("click", e => {
       const idx = Number(e.currentTarget.dataset.idx);
       const input = html.find(`.sb-field-content[data-idx="${idx}"]`);
@@ -813,8 +1089,45 @@ class StoryboardEditor extends Application {
         callback: path => {
           input.val(path);
           this.slides[idx].content = path;
+          const preview = html.find(`.sb-thumbnail-preview[data-idx="${idx}"]`);
+          if (path) { preview.show().find("img").attr("src", path); }
+          else { preview.hide(); }
         }
       }).browse();
+    });
+
+    // FilePicker (audio)
+    html.find(".sb-browse-audio-btn").on("click", e => {
+      const idx = Number(e.currentTarget.dataset.idx);
+      const input = html.find(`.sb-field-audio[data-idx="${idx}"]`);
+      new FilePicker({
+        type: "audio",
+        current: input.val() || "",
+        callback: path => {
+          input.val(path);
+          this.slides[idx].audio = path;
+        }
+      }).browse();
+    });
+
+    // Thumbnail live update
+    html.find(".sb-field-content").on("input", e => {
+      const idx = Number(e.currentTarget.dataset.idx);
+      if (this.slides[idx]?.type !== "image") return;
+      const preview = html.find(`.sb-thumbnail-preview[data-idx="${idx}"]`);
+      const val = e.currentTarget.value.trim();
+      if (val) { preview.show().find("img").attr("src", val); }
+      else { preview.hide(); }
+    });
+
+    // Duplicate slide
+    html.find(".sb-duplicate-slide").on("click", e => {
+      this._syncFields();
+      const idx = Number(e.currentTarget.dataset.idx);
+      const clone = foundry.utils.deepClone(this.slides[idx]);
+      clone.id = foundry.utils.randomID();
+      this.slides.splice(idx + 1, 0, clone);
+      this.render(true);
     });
 
     // Delete slide
@@ -836,6 +1149,18 @@ class StoryboardEditor extends Application {
     });
     html.find(".sb-field-transition").on("change", e => {
       this.slides[Number(e.currentTarget.dataset.idx)].transition = e.currentTarget.value;
+    });
+    html.find(".sb-field-kenburns").on("change", e => {
+      this.slides[Number(e.currentTarget.dataset.idx)].kenBurns = e.currentTarget.value;
+    });
+    html.find(".sb-field-audio").on("change", e => {
+      this.slides[Number(e.currentTarget.dataset.idx)].audio = e.currentTarget.value;
+    });
+    html.find(".sb-field-particles").on("change", e => {
+      this.slides[Number(e.currentTarget.dataset.idx)].ambientParticles = e.currentTarget.value;
+    });
+    html.find(".sb-field-typewriter").on("change", e => {
+      this.slides[Number(e.currentTarget.dataset.idx)].typewriter = e.currentTarget.checked;
     });
 
     // Drag-and-drop
@@ -888,7 +1213,11 @@ class StoryboardEditor extends Application {
       content: "",
       caption: "",
       speaker: "",
-      transition: "crossfade"
+      transition: "crossfade",
+      kenBurns: "none",
+      audio: "",
+      ambientParticles: "none",
+      typewriter: false
     });
     this.render(true);
   }
@@ -912,12 +1241,28 @@ class StoryboardEditor extends Application {
       const idx = Number(inp.dataset.idx);
       if (this.slides[idx]) this.slides[idx].transition = inp.value;
     });
+    el.find(".sb-field-kenburns").each((_, inp) => {
+      const idx = Number(inp.dataset.idx);
+      if (this.slides[idx]) this.slides[idx].kenBurns = inp.value;
+    });
+    el.find(".sb-field-audio").each((_, inp) => {
+      const idx = Number(inp.dataset.idx);
+      if (this.slides[idx]) this.slides[idx].audio = inp.value;
+    });
+    el.find(".sb-field-particles").each((_, inp) => {
+      const idx = Number(inp.dataset.idx);
+      if (this.slides[idx]) this.slides[idx].ambientParticles = inp.value;
+    });
+    el.find(".sb-field-typewriter").each((_, inp) => {
+      const idx = Number(inp.dataset.idx);
+      if (this.slides[idx]) this.slides[idx].typewriter = inp.checked;
+    });
   }
 
   async _present(preview) {
     this._syncFields();
     if (this.slides.length === 0) {
-      ui.notifications.warn("Sand Storyboard | Add at least one slide before presenting.");
+      ui.notifications.warn("GM Storyboard | Add at least one slide before presenting.");
       return;
     }
     await this._saveCurrentDeck();

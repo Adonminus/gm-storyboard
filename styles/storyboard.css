@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════
-   Sand Storyboard — Styles
+   GM Storyboard — Styles
    ═══════════════════════════════════════════ */
 
 /* ─── Viewer Overlay ─── */
@@ -88,6 +88,41 @@
   -webkit-user-drag: none;
 }
 
+/* ─── Ken Burns Animations ─── */
+
+@keyframes sb-kb-zoom-in {
+  from { transform: scale(1); }
+  to   { transform: scale(1.12); }
+}
+
+@keyframes sb-kb-zoom-out {
+  from { transform: scale(1.12); }
+  to   { transform: scale(1); }
+}
+
+@keyframes sb-kb-pan-left {
+  from { transform: translateX(3%) scale(1.05); }
+  to   { transform: translateX(-3%) scale(1.05); }
+}
+
+@keyframes sb-kb-pan-right {
+  from { transform: translateX(-3%) scale(1.05); }
+  to   { transform: translateX(3%) scale(1.05); }
+}
+
+#storyboard-viewer .sb-slide-layer img.sb-kb-zoom-in {
+  animation: sb-kb-zoom-in 10s ease-in-out forwards;
+}
+#storyboard-viewer .sb-slide-layer img.sb-kb-zoom-out {
+  animation: sb-kb-zoom-out 10s ease-in-out forwards;
+}
+#storyboard-viewer .sb-slide-layer img.sb-kb-pan-left {
+  animation: sb-kb-pan-left 10s ease-in-out forwards;
+}
+#storyboard-viewer .sb-slide-layer img.sb-kb-pan-right {
+  animation: sb-kb-pan-right 10s ease-in-out forwards;
+}
+
 #storyboard-viewer .sb-slide-layer iframe {
   width: 100%;
   height: 100%;
@@ -110,11 +145,23 @@
   height: 100%;
 }
 
+/* ─── Ambient Particle Canvas ─── */
+
+#storyboard-viewer .sb-ambient-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
 /* ─── Caption Bar ─── */
 
 #storyboard-viewer .sb-caption-bar {
   position: absolute;
-  bottom: 60px;
+  bottom: 85px;
   left: 50%;
   transform: translateX(-50%);
   width: 80%;
@@ -151,13 +198,19 @@
   line-height: 1.5;
   color: #eee;
   font-family: "Palatino Linotype", "Book Antiqua", Palatino, serif;
+  white-space: pre-wrap;
+}
+
+#storyboard-viewer .sb-caption-bar {
+  max-height: 40vh;
+  overflow-y: auto;
 }
 
 /* ─── Progress Dots ─── */
 
 #storyboard-viewer .sb-progress-dots {
   position: absolute;
-  bottom: 24px;
+  bottom: 52px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -182,8 +235,9 @@
 
 #storyboard-viewer .sb-gm-controls {
   position: absolute;
-  top: 16px;
-  right: 16px;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
   display: flex;
   gap: 8px;
   z-index: 10;
@@ -216,6 +270,75 @@
   background: rgba(229, 57, 53, 0.3) !important;
   border-color: #e53935 !important;
   color: #fff !important;
+}
+
+/* ─── Sidebar Toggle ─── */
+
+/* ─── Sidebar Area (flex wrapper: toggle tab + sidebar) ─── */
+
+#storyboard-viewer .sb-sidebar-area {
+  position: absolute;
+  right: 0;
+  top: 0;
+  height: 100%;
+  z-index: 11;
+  display: flex;
+  align-items: stretch;
+  pointer-events: none;
+}
+
+#storyboard-viewer .sb-sidebar-toggle {
+  pointer-events: auto;
+  align-self: center;
+  width: 28px;
+  height: 64px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-right: none;
+  border-radius: 6px 0 0 6px;
+  background: rgba(30, 30, 30, 0.85);
+  color: #ddd;
+  font-size: 0.85em;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
+  backdrop-filter: blur(4px);
+}
+
+#storyboard-viewer .sb-sidebar-toggle i {
+  transition: transform 0.25s ease;
+}
+
+#storyboard-viewer .sb-sidebar-toggle:hover {
+  background: rgba(60, 60, 60, 0.9);
+  border-color: rgba(255, 255, 255, 0.4);
+  color: #fff;
+}
+
+body.sb-sidebar-visible #storyboard-viewer .sb-sidebar-toggle {
+  background: rgba(92, 107, 188, 0.5);
+  border-color: #5c6bc0;
+  color: #fff;
+}
+
+body.sb-sidebar-visible #storyboard-viewer .sb-sidebar-toggle i {
+  transform: rotate(180deg);
+}
+
+#sidebar.sb-in-viewer {
+  pointer-events: auto !important;
+  height: 100% !important;
+  position: relative !important;
+}
+
+/* ─── Elevate Foundry windows above the viewer while presenting ─── */
+
+body.sb-presenting .window-app,
+body.sb-presenting .application,
+body.sb-presenting #notifications {
+  z-index: 10002 !important;
 }
 
 /* ═══════════════════════════════════════════
@@ -450,6 +573,21 @@
   background: rgba(229, 57, 53, 0.15);
 }
 
+.sb-duplicate-slide {
+  background: none;
+  border: none;
+  color: #777;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 3px;
+  transition: color 0.15s, background 0.15s;
+}
+
+.sb-duplicate-slide:hover {
+  color: #5c6bc0;
+  background: rgba(92, 107, 188, 0.15);
+}
+
 /* ─── Slide Fields ─── */
 
 .sb-slide-fields {
@@ -497,8 +635,16 @@
 
 .sb-slide-fields textarea {
   resize: vertical;
+}
+
+.sb-slide-fields textarea.sb-field-content {
   font-family: "Consolas", "Monaco", monospace;
   font-size: 0.8em;
+}
+
+.sb-slide-fields textarea.sb-field-caption {
+  font-family: inherit;
+  font-size: 0.85em;
 }
 
 /* ─── Image URL + Browse Button ─── */
@@ -535,6 +681,75 @@
   background: #444;
   border-color: #888;
   color: #fff;
+}
+
+/* ─── Thumbnail Preview ─── */
+
+.sb-thumbnail-preview {
+  margin-top: 4px;
+  text-align: center;
+}
+
+.sb-thumbnail-preview img {
+  max-height: 80px;
+  max-width: 100%;
+  object-fit: contain;
+  border-radius: 4px;
+  background: #111;
+  border: 1px solid #3a3a3a;
+}
+
+/* ─── Audio Field + Checkbox ─── */
+
+.sb-audio-field {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.sb-audio-field input {
+  flex: 1;
+  min-width: 0;
+}
+
+.sb-browse-audio-btn {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #444;
+  border-radius: 3px;
+  background: #333;
+  color: #ccc;
+  font-size: 0.8em;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.sb-browse-audio-btn:hover {
+  background: #444;
+  border-color: #888;
+  color: #fff;
+}
+
+.sb-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85em;
+  color: #ccc;
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.sb-checkbox-label input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: #5c6bc0;
 }
 
 .sb-field-row {
