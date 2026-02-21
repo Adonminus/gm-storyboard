@@ -62,7 +62,8 @@ const presentation = {
   active: false,
   preview: false,
   slides: [],
-  index: 0
+  index: 0,
+  captionIndex: 0
 };
 
 /* ═══════════════════════════════════════════
@@ -83,6 +84,7 @@ Hooks.once("init", () => {
 Hooks.once("socketlib.ready", () => {
   socket = socketlib.registerModule(MODULE_ID);
   socket.register("showSlide", _onRemoteShowSlide);
+  socket.register("showCaption", _onRemoteShowCaption);
   socket.register("endShow", _onRemoteEndShow);
   socket.register("getPresentation", _onGetPresentation);
 });
@@ -102,7 +104,10 @@ Hooks.once("ready", () => {
   // Late-join sync: if a presentation is running, catch up
   if (!game.user.isGM && socket) {
     socket.executeAsGM("getPresentation").then(data => {
-      if (data) _onRemoteShowSlide(data);
+      if (data) {
+        _migrateSlide(data.slide);
+        _onRemoteShowSlide(data);
+      }
     }).catch(() => {});
   }
 });
@@ -130,7 +135,12 @@ Hooks.on("getSceneControlButtons", controls => {
    ═══════════════════════════════════════════ */
 
 function _onRemoteShowSlide(data) {
-  _renderViewer(data.slide, data.index, data.total);
+  _migrateSlide(data.slide);
+  _renderViewer(data.slide, data.index, data.total, data.captionIndex || 0);
+}
+
+function _onRemoteShowCaption(data) {
+  _renderCaption(data);
 }
 
 function _onRemoteEndShow() {
@@ -139,10 +149,13 @@ function _onRemoteEndShow() {
 
 function _onGetPresentation() {
   if (!presentation.active || presentation.preview) return null;
+  const slide = presentation.slides[presentation.index];
   return {
-    slide: presentation.slides[presentation.index],
+    slide,
     index: presentation.index,
-    total: presentation.slides.length
+    total: presentation.slides.length,
+    captionIndex: presentation.captionIndex,
+    totalCaptions: (slide.captions || []).length
   };
 }
 
@@ -154,8 +167,9 @@ function startPresentation(slides, preview = false) {
   if (slides.length === 0) return;
   presentation.active = true;
   presentation.preview = preview;
-  presentation.slides = slides;
+  presentation.slides = slides.map(s => _migrateSlide(s));
   presentation.index = 0;
+  presentation.captionIndex = 0;
   _broadcastSlide();
 }
 
@@ -163,11 +177,41 @@ function goToSlide(index) {
   if (!presentation.active) return;
   if (index < 0 || index >= presentation.slides.length) return;
   presentation.index = index;
+  presentation.captionIndex = 0;
   _broadcastSlide();
 }
 
-function nextSlide() { goToSlide(presentation.index + 1); }
-function prevSlide() { goToSlide(presentation.index - 1); }
+function nextStep() {
+  if (!presentation.active) return;
+  const slide = presentation.slides[presentation.index];
+  const captions = slide.captions || [];
+  if (presentation.captionIndex < captions.length - 1) {
+    presentation.captionIndex++;
+    _broadcastCaption();
+  } else {
+    if (presentation.index < presentation.slides.length - 1) {
+      presentation.index++;
+      presentation.captionIndex = 0;
+      _broadcastSlide();
+    }
+  }
+}
+
+function prevStep() {
+  if (!presentation.active) return;
+  if (presentation.captionIndex > 0) {
+    presentation.captionIndex--;
+    _broadcastCaption();
+  } else {
+    if (presentation.index > 0) {
+      presentation.index--;
+      const prev = presentation.slides[presentation.index];
+      const captions = prev.captions || [];
+      presentation.captionIndex = Math.max(captions.length - 1, 0);
+      _broadcastSlide();
+    }
+  }
+}
 
 function endPresentation() {
   if (!presentation.active) return;
@@ -178,9 +222,32 @@ function endPresentation() {
 
 function _broadcastSlide() {
   const slide = presentation.slides[presentation.index];
-  const data = { slide, index: presentation.index, total: presentation.slides.length };
-  _renderViewer(slide, presentation.index, presentation.slides.length);
+  const data = {
+    slide,
+    index: presentation.index,
+    total: presentation.slides.length,
+    captionIndex: presentation.captionIndex,
+    totalCaptions: (slide.captions || []).length
+  };
+  _renderViewer(slide, presentation.index, presentation.slides.length, presentation.captionIndex);
   if (!presentation.preview) socket.executeForOthers("showSlide", data);
+}
+
+function _broadcastCaption() {
+  const slide = presentation.slides[presentation.index];
+  const captions = slide.captions || [];
+  const cap = captions[presentation.captionIndex] || { speaker: "", text: "" };
+  const data = {
+    speaker: cap.speaker,
+    text: cap.text,
+    captionIndex: presentation.captionIndex,
+    totalCaptions: captions.length,
+    typewriter: !!slide.typewriter,
+    slideIndex: presentation.index,
+    totalSlides: presentation.slides.length
+  };
+  _renderCaption(data);
+  if (!presentation.preview) socket.executeForOthers("showCaption", data);
 }
 
 /* ═══════════════════════════════════════════
@@ -550,10 +617,11 @@ function _createViewer() {
     </div>
     ${game.user.isGM ? `
     <div class="sb-progress-dots"></div>
+    <div class="sb-caption-counter"></div>
     <div class="sb-gm-controls">
-      <button class="sb-prev-btn" title="Previous slide"><i class="fas fa-chevron-left"></i> Prev</button>
+      <button class="sb-prev-btn" title="Previous step"><i class="fas fa-chevron-left"></i> Prev</button>
       <button class="sb-end-btn" title="End slideshow"><i class="fas fa-times"></i> End</button>
-      <button class="sb-next-btn" title="Next slide">Next <i class="fas fa-chevron-right"></i></button>
+      <button class="sb-next-btn" title="Next step">Next <i class="fas fa-chevron-right"></i></button>
     </div>` : ""}
   `;
   document.body.appendChild(viewerEl);
@@ -576,8 +644,8 @@ function _createViewer() {
   });
 
   if (game.user.isGM) {
-    viewerEl.querySelector(".sb-prev-btn").addEventListener("click", prevSlide);
-    viewerEl.querySelector(".sb-next-btn").addEventListener("click", nextSlide);
+    viewerEl.querySelector(".sb-prev-btn").addEventListener("click", prevStep);
+    viewerEl.querySelector(".sb-next-btn").addEventListener("click", nextStep);
     viewerEl.querySelector(".sb-end-btn").addEventListener("click", endPresentation);
     document.addEventListener("keydown", _viewerKeyHandler);
   }
@@ -609,7 +677,7 @@ const ALL_LAYER_CLASSES = ["active", "enter-crossfade",
   "enter-slide-left", "enter-slide-right", "enter-slide-up", "enter-slide-down",
   "enter-zoom-in", "enter-zoom-out"];
 
-function _renderViewer(slide, index, total) {
+function _renderViewer(slide, index, total, captionIndex = 0) {
   if (!viewerEl) _createViewer();
 
   const targetSel = activeLayer === "a" ? ".sb-layer-a" : ".sb-layer-b";
@@ -684,11 +752,13 @@ function _renderViewer(slide, index, total) {
   const bar = viewerEl.querySelector(".sb-caption-bar");
   const speakerEl = bar.querySelector(".sb-speaker");
   const captionEl = bar.querySelector(".sb-caption-text");
-  if (slide.caption || slide.speaker) {
+  const captions = slide.captions || [];
+  const cap = captions[captionIndex];
+  if (cap && (cap.text || cap.speaker)) {
     bar.classList.add("visible");
-    speakerEl.textContent = slide.speaker || "";
-    speakerEl.style.display = slide.speaker ? "" : "none";
-    const fullCaption = slide.caption || "";
+    speakerEl.textContent = cap.speaker || "";
+    speakerEl.style.display = cap.speaker ? "" : "none";
+    const fullCaption = cap.text || "";
     if (slide.typewriter && fullCaption.length > 0) {
       captionEl.textContent = "";
       let charIdx = 0;
@@ -719,12 +789,66 @@ function _renderViewer(slide, index, total) {
   // Ambient particles
   _startAmbientParticles(slide.ambientParticles || "none");
 
+  // Progress UI
+  _updateProgressUI(index, total, captionIndex, captions.length);
+}
+
+function _renderCaption(data) {
+  if (!viewerEl) return;
+
+  if (_typewriterTimer) { clearInterval(_typewriterTimer); _typewriterTimer = null; }
+
+  const bar = viewerEl.querySelector(".sb-caption-bar");
+  const speakerEl = bar.querySelector(".sb-speaker");
+  const captionEl = bar.querySelector(".sb-caption-text");
+
+  if (data.text || data.speaker) {
+    bar.classList.add("visible");
+    speakerEl.textContent = data.speaker || "";
+    speakerEl.style.display = data.speaker ? "" : "none";
+    const fullCaption = data.text || "";
+    if (data.typewriter && fullCaption.length > 0) {
+      captionEl.textContent = "";
+      let charIdx = 0;
+      _typewriterTimer = setInterval(() => {
+        charIdx++;
+        captionEl.textContent = fullCaption.substring(0, charIdx);
+        if (charIdx >= fullCaption.length) {
+          clearInterval(_typewriterTimer);
+          _typewriterTimer = null;
+        }
+      }, TYPEWRITER_SPEED);
+    } else {
+      captionEl.textContent = fullCaption;
+    }
+  } else {
+    bar.classList.remove("visible");
+  }
+
+  _updateProgressUI(data.slideIndex, data.totalSlides, data.captionIndex, data.totalCaptions);
+}
+
+function _updateProgressUI(slideIndex, totalSlides, captionIndex, totalCaptions) {
+  if (!viewerEl) return;
+
   // Progress dots (GM only)
   const dots = viewerEl.querySelector(".sb-progress-dots");
   if (dots) {
-    dots.innerHTML = Array.from({ length: total }, (_, i) =>
-      `<span class="sb-dot${i === index ? " active" : ""}"></span>`
+    dots.innerHTML = Array.from({ length: totalSlides }, (_, i) =>
+      `<span class="sb-dot${i === slideIndex ? " active" : ""}"></span>`
     ).join("");
+  }
+
+  // Caption counter (GM only)
+  const counter = viewerEl.querySelector(".sb-caption-counter");
+  if (counter) {
+    if (totalCaptions > 1) {
+      counter.textContent = `Caption ${captionIndex + 1}/${totalCaptions}`;
+      counter.style.display = "";
+    } else {
+      counter.textContent = "";
+      counter.style.display = "none";
+    }
   }
 }
 
@@ -750,9 +874,9 @@ function _viewerKeyHandler(e) {
   if (!presentation.active) return;
   switch (e.key) {
     case "ArrowRight": case "ArrowDown":
-      e.preventDefault(); nextSlide(); break;
+      e.preventDefault(); nextStep(); break;
     case "ArrowLeft": case "ArrowUp":
-      e.preventDefault(); prevSlide(); break;
+      e.preventDefault(); prevStep(); break;
     case "Escape":
       e.preventDefault(); endPresentation(); break;
   }
@@ -767,6 +891,18 @@ function _escapeHtml(str) {
   const el = document.createElement("span");
   el.textContent = str;
   return el.innerHTML;
+}
+
+function _migrateSlide(slide) {
+  if (!slide.captions) {
+    slide.captions = [];
+    if (slide.caption || slide.speaker) {
+      slide.captions.push({ speaker: slide.speaker || "", text: slide.caption || "" });
+    }
+    delete slide.caption;
+    delete slide.speaker;
+  }
+  return slide;
 }
 
 /* ═══════════════════════════════════════════
@@ -791,6 +927,7 @@ class StoryboardEditor extends Application {
     super();
     this.currentDeckId = null;
     this.slides = [];
+    this._expandedCaptions = new Set();
   }
 
   static get defaultOptions() {
@@ -827,13 +964,14 @@ class StoryboardEditor extends Application {
 
     // If our current deck still exists, keep working with in-memory slides
     if (this.currentDeckId && decks[this.currentDeckId]) {
+      this.slides.forEach(s => _migrateSlide(s));
       return;
     }
 
     // Otherwise pick the first deck, or create one
     if (ids.length > 0) {
       this.currentDeckId = ids[0];
-      this.slides = decks[ids[0]].slides || [];
+      this.slides = (decks[ids[0]].slides || []).map(s => _migrateSlide(s));
     } else {
       const id = foundry.utils.randomID();
       decks[id] = { name: "Untitled Storyboard", slides: [] };
@@ -857,7 +995,7 @@ class StoryboardEditor extends Application {
     await this._saveCurrentDeck();
     this.currentDeckId = id;
     const decks = _getDecks();
-    this.slides = decks[id]?.slides || [];
+    this.slides = (decks[id]?.slides || []).map(s => _migrateSlide(s));
     this.render(true);
   }
 
@@ -958,6 +1096,7 @@ class StoryboardEditor extends Application {
   }
 
   _buildSlideItem(slide, idx) {
+    _migrateSlide(slide);
     const isImage = slide.type === "image";
     const transitionOpts = Object.entries(TRANSITIONS).map(([val, label]) =>
       `<option value="${val}" ${slide.transition === val ? "selected" : ""}>${label}</option>`
@@ -1005,16 +1144,7 @@ class StoryboardEditor extends Application {
           <label>${isImage ? "Image URL" : "HTML Content"}</label>
           ${contentField}
           ${thumbnailHtml}
-          <div class="sb-field-row">
-            <div class="sb-field-group">
-              <label>Speaker</label>
-              <input type="text" class="sb-field-speaker" data-idx="${idx}"
-                value="${_escapeHtml(slide.speaker)}" placeholder="Character name" />
-            </div>
-          </div>
-          <label>Caption</label>
-          <textarea class="sb-field-caption" data-idx="${idx}" rows="3"
-            placeholder="Narration text...">${_escapeHtml(slide.caption)}</textarea>
+          ${this._buildCaptionChain(slide, idx)}
           <div class="sb-field-row">
             <div class="sb-field-group">
               <label>Transition</label>
@@ -1058,6 +1188,51 @@ class StoryboardEditor extends Application {
           </div>
         </div>
       </li>`;
+  }
+
+  _buildCaptionChain(slide, idx) {
+    const captions = slide.captions || [];
+    const preview = captions.length > 0
+      ? _escapeHtml(captions[0].speaker
+          ? `${captions[0].speaker}: ${captions[0].text || "..."}`
+          : (captions[0].text || "...")).substring(0, 60)
+      : "";
+    const items = captions.map((cap, cidx) => `
+      <div class="sb-caption-item" data-idx="${idx}" data-cidx="${cidx}">
+        <div class="sb-caption-item-header">
+          <span class="sb-caption-item-num">${cidx + 1}.</span>
+          <button class="sb-move-caption-up" data-idx="${idx}" data-cidx="${cidx}" title="Move up"
+            ${cidx === 0 ? "disabled" : ""}><i class="fas fa-chevron-up"></i></button>
+          <button class="sb-move-caption-down" data-idx="${idx}" data-cidx="${cidx}" title="Move down"
+            ${cidx === captions.length - 1 ? "disabled" : ""}><i class="fas fa-chevron-down"></i></button>
+          <button class="sb-delete-caption" data-idx="${idx}" data-cidx="${cidx}" title="Remove caption">
+            <i class="fas fa-times"></i></button>
+        </div>
+        <div class="sb-caption-item-fields">
+          <label>Speaker</label>
+          <input type="text" class="sb-field-caption-speaker" data-idx="${idx}" data-cidx="${cidx}"
+            value="${_escapeHtml(cap.speaker)}" placeholder="Character name" />
+          <label>Text</label>
+          <textarea class="sb-field-caption-text" data-idx="${idx}" data-cidx="${cidx}" rows="2"
+            placeholder="Narration text...">${_escapeHtml(cap.text)}</textarea>
+        </div>
+      </div>
+    `).join("");
+
+    return `
+      <div class="sb-caption-chain${this._expandedCaptions.has(idx) ? "" : " collapsed"}" data-idx="${idx}">
+        <div class="sb-caption-chain-header">
+          <span class="sb-caption-chain-toggle" data-idx="${idx}">
+            <i class="fas fa-chevron-right"></i>
+            Captions (${captions.length})${preview ? `<span class="sb-caption-preview">${preview}</span>` : ""}
+          </span>
+          <button class="sb-add-caption" data-idx="${idx}" title="Add caption">
+            <i class="fas fa-plus"></i></button>
+        </div>
+        <div class="sb-caption-chain-body">
+          ${items}
+        </div>
+      </div>`;
   }
 
   /* ── Event listeners ── */
@@ -1141,12 +1316,6 @@ class StoryboardEditor extends Application {
     html.find(".sb-field-content").on("change", e => {
       this.slides[Number(e.currentTarget.dataset.idx)].content = e.currentTarget.value;
     });
-    html.find(".sb-field-caption").on("change", e => {
-      this.slides[Number(e.currentTarget.dataset.idx)].caption = e.currentTarget.value;
-    });
-    html.find(".sb-field-speaker").on("change", e => {
-      this.slides[Number(e.currentTarget.dataset.idx)].speaker = e.currentTarget.value;
-    });
     html.find(".sb-field-transition").on("change", e => {
       this.slides[Number(e.currentTarget.dataset.idx)].transition = e.currentTarget.value;
     });
@@ -1161,6 +1330,75 @@ class StoryboardEditor extends Application {
     });
     html.find(".sb-field-typewriter").on("change", e => {
       this.slides[Number(e.currentTarget.dataset.idx)].typewriter = e.currentTarget.checked;
+    });
+
+    // Caption chain: collapse/expand toggle
+    html.find(".sb-caption-chain-toggle").on("click", e => {
+      const idx = Number(e.currentTarget.dataset.idx);
+      const chain = e.currentTarget.closest(".sb-caption-chain");
+      chain.classList.toggle("collapsed");
+      if (chain.classList.contains("collapsed")) {
+        this._expandedCaptions.delete(idx);
+      } else {
+        this._expandedCaptions.add(idx);
+      }
+    });
+
+    // Caption chain: add
+    html.find(".sb-add-caption").on("click", e => {
+      this._syncFields();
+      const idx = Number(e.currentTarget.dataset.idx);
+      if (!this.slides[idx].captions) this.slides[idx].captions = [];
+      this.slides[idx].captions.push({ speaker: "", text: "" });
+      this._expandedCaptions.add(idx);
+      this.render(true);
+    });
+
+    // Caption chain: delete
+    html.find(".sb-delete-caption").on("click", e => {
+      this._syncFields();
+      const idx = Number(e.currentTarget.dataset.idx);
+      const cidx = Number(e.currentTarget.dataset.cidx);
+      this.slides[idx].captions.splice(cidx, 1);
+      this.render(true);
+    });
+
+    // Caption chain: move up
+    html.find(".sb-move-caption-up").on("click", e => {
+      this._syncFields();
+      const idx = Number(e.currentTarget.dataset.idx);
+      const cidx = Number(e.currentTarget.dataset.cidx);
+      if (cidx <= 0) return;
+      const arr = this.slides[idx].captions;
+      [arr[cidx - 1], arr[cidx]] = [arr[cidx], arr[cidx - 1]];
+      this.render(true);
+    });
+
+    // Caption chain: move down
+    html.find(".sb-move-caption-down").on("click", e => {
+      this._syncFields();
+      const idx = Number(e.currentTarget.dataset.idx);
+      const cidx = Number(e.currentTarget.dataset.cidx);
+      const arr = this.slides[idx].captions;
+      if (cidx >= arr.length - 1) return;
+      [arr[cidx], arr[cidx + 1]] = [arr[cidx + 1], arr[cidx]];
+      this.render(true);
+    });
+
+    // Caption chain: field auto-save
+    html.find(".sb-field-caption-speaker").on("change", e => {
+      const idx = Number(e.currentTarget.dataset.idx);
+      const cidx = Number(e.currentTarget.dataset.cidx);
+      if (this.slides[idx]?.captions?.[cidx]) {
+        this.slides[idx].captions[cidx].speaker = e.currentTarget.value;
+      }
+    });
+    html.find(".sb-field-caption-text").on("change", e => {
+      const idx = Number(e.currentTarget.dataset.idx);
+      const cidx = Number(e.currentTarget.dataset.cidx);
+      if (this.slides[idx]?.captions?.[cidx]) {
+        this.slides[idx].captions[cidx].text = e.currentTarget.value;
+      }
     });
 
     // Drag-and-drop
@@ -1211,8 +1449,7 @@ class StoryboardEditor extends Application {
       id: foundry.utils.randomID(),
       type,
       content: "",
-      caption: "",
-      speaker: "",
+      captions: [],
       transition: "crossfade",
       kenBurns: "none",
       audio: "",
@@ -1229,13 +1466,19 @@ class StoryboardEditor extends Application {
       const idx = Number(inp.dataset.idx);
       if (this.slides[idx]) this.slides[idx].content = inp.value;
     });
-    el.find(".sb-field-caption").each((_, inp) => {
+    el.find(".sb-field-caption-speaker").each((_, inp) => {
       const idx = Number(inp.dataset.idx);
-      if (this.slides[idx]) this.slides[idx].caption = inp.value;
+      const cidx = Number(inp.dataset.cidx);
+      if (this.slides[idx]?.captions?.[cidx]) {
+        this.slides[idx].captions[cidx].speaker = inp.value;
+      }
     });
-    el.find(".sb-field-speaker").each((_, inp) => {
+    el.find(".sb-field-caption-text").each((_, inp) => {
       const idx = Number(inp.dataset.idx);
-      if (this.slides[idx]) this.slides[idx].speaker = inp.value;
+      const cidx = Number(inp.dataset.cidx);
+      if (this.slides[idx]?.captions?.[cidx]) {
+        this.slides[idx].captions[cidx].text = inp.value;
+      }
     });
     el.find(".sb-field-transition").each((_, inp) => {
       const idx = Number(inp.dataset.idx);
