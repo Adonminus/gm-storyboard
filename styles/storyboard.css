@@ -944,6 +944,11 @@ body.sb-presenting #notifications {
   color: #fff;
 }
 
+.sb-audio-field.sb-audio-dimmed {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
 .sb-checkbox-label {
   display: flex;
   align-items: center;

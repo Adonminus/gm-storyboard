@@ -778,12 +778,14 @@ function _renderViewer(slide, index, total, captionIndex = 0) {
   }
 
   // Audio
-  if (_currentAudio) { _currentAudio.pause(); _currentAudio.currentTime = 0; _currentAudio = null; }
-  if (slide.audio) {
-    _currentAudio = new Audio(slide.audio);
-    _currentAudio.volume = 0.8;
-    _currentAudio.loop = true;
-    _currentAudio.play().catch(() => {});
+  if (!slide.audioContinue) {
+    if (_currentAudio) { _currentAudio.pause(); _currentAudio.currentTime = 0; _currentAudio = null; }
+    if (slide.audio) {
+      _currentAudio = new Audio(slide.audio);
+      _currentAudio.volume = 0.8;
+      _currentAudio.loop = true;
+      _currentAudio.play().catch(() => {});
+    }
   }
 
   // Ambient particles
@@ -1168,14 +1170,20 @@ class StoryboardEditor extends Application {
           <div class="sb-field-row">
             <div class="sb-field-group" style="flex:3">
               <label>Audio</label>
-              <div class="sb-audio-field">
+              <div class="sb-audio-field${slide.audioContinue ? " sb-audio-dimmed" : ""}">
                 <input type="text" class="sb-field-audio" data-idx="${idx}"
                   value="${_escapeHtml(slide.audio || "")}"
-                  placeholder="Audio file path..." />
-                <button class="sb-browse-audio-btn" data-idx="${idx}" title="Browse audio">
+                  placeholder="Audio file path..." ${slide.audioContinue ? "disabled" : ""} />
+                <button class="sb-browse-audio-btn" data-idx="${idx}" title="Browse audio"
+                  ${slide.audioContinue ? "disabled" : ""}>
                   <i class="fas fa-music"></i>
                 </button>
               </div>
+              <label class="sb-checkbox-label">
+                <input type="checkbox" class="sb-field-audio-continue" data-idx="${idx}"
+                  ${slide.audioContinue ? "checked" : ""} />
+                <span>Continue from previous slide</span>
+              </label>
             </div>
             <div class="sb-field-group" style="flex:1">
               <label>Typewriter</label>
@@ -1331,6 +1339,22 @@ class StoryboardEditor extends Application {
     html.find(".sb-field-typewriter").on("change", e => {
       this.slides[Number(e.currentTarget.dataset.idx)].typewriter = e.currentTarget.checked;
     });
+    html.find(".sb-field-audio-continue").on("change", e => {
+      const idx = Number(e.currentTarget.dataset.idx);
+      this.slides[idx].audioContinue = e.currentTarget.checked;
+      const audioField = html.find(`.sb-audio-field`).eq(idx);
+      const audioInput = html.find(`.sb-field-audio[data-idx="${idx}"]`);
+      const audioBtn = html.find(`.sb-browse-audio-btn[data-idx="${idx}"]`);
+      if (e.currentTarget.checked) {
+        audioField.addClass("sb-audio-dimmed");
+        audioInput.prop("disabled", true);
+        audioBtn.prop("disabled", true);
+      } else {
+        audioField.removeClass("sb-audio-dimmed");
+        audioInput.prop("disabled", false);
+        audioBtn.prop("disabled", false);
+      }
+    });
 
     // Caption chain: collapse/expand toggle
     html.find(".sb-caption-chain-toggle").on("click", e => {
@@ -1453,6 +1477,7 @@ class StoryboardEditor extends Application {
       transition: "crossfade",
       kenBurns: "none",
       audio: "",
+      audioContinue: false,
       ambientParticles: "none",
       typewriter: false
     });
@@ -1491,6 +1516,10 @@ class StoryboardEditor extends Application {
     el.find(".sb-field-audio").each((_, inp) => {
       const idx = Number(inp.dataset.idx);
       if (this.slides[idx]) this.slides[idx].audio = inp.value;
+    });
+    el.find(".sb-field-audio-continue").each((_, inp) => {
+      const idx = Number(inp.dataset.idx);
+      if (this.slides[idx]) this.slides[idx].audioContinue = inp.checked;
     });
     el.find(".sb-field-particles").each((_, inp) => {
       const idx = Number(inp.dataset.idx);
