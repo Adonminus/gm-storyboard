@@ -441,6 +441,26 @@ body.sb-presenting #notifications {
   background: rgba(229, 57, 53, 0.15);
 }
 
+.sb-deck-bar-divider {
+  width: 1px;
+  height: 20px;
+  background: #444;
+  margin: 0 2px;
+  flex-shrink: 0;
+}
+
+.sb-deck-bar .sb-add-image:hover {
+  color: #81c784;
+  border-color: rgba(129, 199, 132, 0.5);
+  background: rgba(46, 125, 50, 0.2);
+}
+
+.sb-deck-bar .sb-add-html:hover {
+  color: #ffb74d;
+  border-color: rgba(255, 183, 77, 0.5);
+  background: rgba(230, 81, 0, 0.2);
+}
+
 /* ─── Toolbars ─── */
 
 .sb-toolbar {
@@ -451,24 +471,24 @@ body.sb-presenting #notifications {
   flex-shrink: 0;
 }
 
-.sb-toolbar-top {
-  border-bottom: 1px solid #3a3a3a;
-}
-
 .sb-toolbar-bottom {
   border-top: 1px solid #3a3a3a;
   flex-wrap: wrap;
 }
 
+.sb-toolbar-bottom button {
+  flex: 1;
+}
+
 .sb-toolbar button {
-  padding: 6px 12px;
-  border: 1px solid #555;
-  border-radius: 4px;
+  padding: 7px 12px;
+  border: 1px solid #444;
+  border-radius: 5px;
   background: #333;
-  color: #ddd;
+  color: #ccc;
   font-size: 0.8em;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
   white-space: nowrap;
 }
 
@@ -498,12 +518,12 @@ body.sb-presenting #notifications {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 8px;
+  padding: 6px 8px;
   margin: 0;
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .sb-empty {
@@ -518,22 +538,23 @@ body.sb-presenting #notifications {
 .sb-slide-item {
   background: #2a2a2a;
   border: 1px solid #3a3a3a;
-  border-radius: 6px;
+  border-radius: 8px;
   overflow: hidden;
   flex-shrink: 0;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
 
 .sb-slide-item:hover {
-  border-color: #555;
+  border-color: #4a4a4a;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
 }
 
 .sb-slide-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  background: #333;
+  gap: 5px;
+  padding: 5px 10px;
+  background: #2f2f2f;
   border-bottom: 1px solid #3a3a3a;
 }
 
@@ -577,11 +598,17 @@ body.sb-presenting #notifications {
 .sb-delete-slide {
   background: none;
   border: none;
-  color: #777;
+  color: #555;
   cursor: pointer;
-  padding: 4px 6px;
+  padding: 2px 4px;
   border-radius: 3px;
+  font-size: 0.7em;
   transition: color 0.15s, background 0.15s;
+  opacity: 0.6;
+}
+
+.sb-slide-item:hover .sb-delete-slide {
+  opacity: 1;
 }
 
 .sb-delete-slide:hover {
@@ -589,14 +616,38 @@ body.sb-presenting #notifications {
   background: rgba(229, 57, 53, 0.15);
 }
 
+.sb-delete-slide.sb-confirm-armed {
+  color: #fff !important;
+  background: #c62828;
+  font-size: 0.65em;
+  font-weight: 600;
+  white-space: nowrap;
+  padding: 3px 8px;
+  opacity: 1 !important;
+}
+
+.sb-delete-slide.sb-confirm-armed:hover {
+  background: #b71c1c;
+}
+
+.sb-delete-slide.sb-confirm-armed i {
+  margin-right: 3px;
+}
+
 .sb-duplicate-slide {
   background: none;
   border: none;
-  color: #777;
+  color: #666;
   cursor: pointer;
-  padding: 4px 6px;
+  padding: 2px 4px;
   border-radius: 3px;
-  transition: color 0.15s, background 0.15s;
+  font-size: 0.7em;
+  transition: color 0.15s, background 0.15s, opacity 0.15s;
+  opacity: 0.6;
+}
+
+.sb-slide-item:hover .sb-duplicate-slide {
+  opacity: 1;
 }
 
 .sb-duplicate-slide:hover {
@@ -604,71 +655,209 @@ body.sb-presenting #notifications {
   background: rgba(92, 107, 188, 0.15);
 }
 
-/* ─── Slide Fields ─── */
+/* ─── Slide Primary Zone (always visible) ─── */
 
-.sb-slide-fields {
-  padding: 10px;
+.sb-slide-primary {
+  padding: 8px 10px;
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
-.sb-slide-fields label {
+.sb-slide-primary label,
+.sb-slide-settings-body label {
   display: block;
-  font-size: 0.7em;
+  font-size: 0.75em;
   color: #999;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.02em;
   margin-bottom: 2px;
 }
 
-.sb-slide-fields input[type="text"],
-.sb-slide-fields textarea,
-.sb-slide-fields select {
+.sb-slide-primary input[type="text"],
+.sb-slide-primary textarea,
+.sb-slide-primary select,
+.sb-slide-settings-body input[type="text"],
+.sb-slide-settings-body textarea,
+.sb-slide-settings-body select {
   width: 100%;
-  padding: 5px 6px;
-  border: 1px solid #444 !important;
-  border-radius: 3px;
+  padding: 6px 8px;
+  border: 1px solid #3a3a3a !important;
+  border-radius: 4px;
   background: #1a1a1a !important;
   color: #ddd !important;
   font-size: 0.85em;
   font-family: inherit;
   box-sizing: border-box;
-  transition: border-color 0.15s;
+  transition: border-color 0.2s;
 }
 
-.sb-slide-fields input[type="text"]:focus,
-.sb-slide-fields textarea:focus,
-.sb-slide-fields select:focus {
+.sb-slide-primary input[type="text"]:focus,
+.sb-slide-primary textarea:focus,
+.sb-slide-primary select:focus,
+.sb-slide-settings-body input[type="text"]:focus,
+.sb-slide-settings-body textarea:focus,
+.sb-slide-settings-body select:focus {
   border-color: #5c6bc0;
   outline: none;
 }
 
-.sb-slide-fields select option {
+.sb-slide-settings-body select option {
   background: #1a1a1a !important;
   color: #ddd !important;
 }
 
-.sb-slide-fields textarea {
+.sb-slide-primary textarea {
   resize: vertical;
 }
 
-.sb-slide-fields textarea.sb-field-content {
+.sb-slide-primary textarea.sb-field-content {
   font-family: "Consolas", "Monaco", monospace;
   font-size: 0.8em;
 }
 
-.sb-slide-fields textarea.sb-field-caption-text {
-  font-family: inherit;
+/* ─── Slide Settings Panel (collapsible) ─── */
+
+.sb-slide-settings {
+  border-top: 1px solid #333;
+}
+
+.sb-slide-settings-header {
+  display: flex;
+  align-items: center;
+  padding: 5px 10px;
+  background: #252525;
+  font-size: 0.8em;
+  color: #aaa;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.sb-slide-settings:not(.collapsed) .sb-slide-settings-header {
+  border-bottom: 1px solid #333;
+}
+
+.sb-slide-settings-toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  flex: 1;
+  min-width: 0;
+  user-select: none;
+  transition: color 0.15s;
+}
+
+.sb-slide-settings-toggle:hover {
+  color: #ddd;
+}
+
+.sb-slide-settings-toggle > i {
+  font-size: 0.75em;
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+  width: 10px;
+  text-align: center;
+}
+
+.sb-slide-settings:not(.collapsed) .sb-slide-settings-toggle > i {
+  transform: rotate(90deg);
+}
+
+.sb-settings-summary {
   font-size: 0.85em;
+  color: #666;
+  text-transform: none;
+  letter-spacing: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-left: 4px;
+  font-style: italic;
+}
+
+.sb-slide-settings:not(.collapsed) .sb-settings-summary {
+  display: none;
+}
+
+.sb-slide-settings-body {
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sb-slide-settings.collapsed .sb-slide-settings-body {
+  display: none;
+}
+
+/* ─── Icon Pickers (Ken Burns + Particles) ─── */
+
+.sb-icon-picker {
+  display: flex;
+  gap: 3px;
+  flex-wrap: wrap;
+}
+
+.sb-icon-pick {
+  width: 32px;
+  height: 28px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #3a3a3a;
+  border-radius: 4px;
+  background: #1a1a1a;
+  color: #888;
+  font-size: 0.8em;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.sb-icon-pick:hover {
+  background: #2a2a2a;
+  border-color: #5c6bc0;
+  color: #bbb;
+}
+
+.sb-icon-pick.active {
+  background: rgba(92, 107, 188, 0.2);
+  border-color: #5c6bc0;
+  color: #7986cb;
+}
+
+/* ─── Inline Thumbnail (beside URL input) ─── */
+
+.sb-image-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.sb-image-row .sb-image-field {
+  flex: 1;
+  min-width: 0;
+}
+
+.sb-image-row .sb-thumbnail-preview {
+  flex-shrink: 0;
+  margin-top: 0;
+  text-align: center;
+}
+
+.sb-image-row .sb-thumbnail-preview img {
+  width: 64px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 4px;
+  background: #111;
+  border: 1px solid #3a3a3a;
 }
 
 /* ─── Caption Chain (Editor) ─── */
 
 .sb-caption-chain {
-  border: 1px solid #444;
-  border-radius: 4px;
-  background: #1a1a1a;
+  border-top: 1px solid #333;
   overflow: hidden;
 }
 
@@ -676,7 +865,7 @@ body.sb-presenting #notifications {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 5px 8px;
+  padding: 5px 10px;
   background: #252525;
   font-size: 0.8em;
   color: #aaa;
@@ -685,7 +874,7 @@ body.sb-presenting #notifications {
 }
 
 .sb-caption-chain:not(.collapsed) .sb-caption-chain-header {
-  border-bottom: 1px solid #444;
+  border-bottom: 1px solid #333;
 }
 
 .sb-caption-chain-toggle {
@@ -766,7 +955,7 @@ body.sb-presenting #notifications {
 
 .sb-caption-item {
   border-top: 1px solid #333;
-  padding: 6px 8px;
+  padding: 8px 10px;
 }
 
 .sb-caption-item:first-of-type {
@@ -818,17 +1007,27 @@ body.sb-presenting #notifications {
   background: rgba(229, 57, 53, 0.15);
 }
 
+.sb-caption-item-header .sb-delete-caption.sb-confirm-armed {
+  color: #fff;
+  background: #c62828;
+  border-radius: 3px;
+}
+
+.sb-caption-item-header .sb-delete-caption.sb-confirm-armed:hover {
+  color: #fff;
+  background: #b71c1c;
+}
+
 .sb-caption-item-fields {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 
 .sb-caption-item-fields label {
-  font-size: 0.65em;
-  color: #777;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  font-size: 0.75em;
+  color: #999;
+  letter-spacing: 0.02em;
   margin-bottom: 0;
 }
 
@@ -838,7 +1037,7 @@ body.sb-presenting #notifications {
   padding: 4px 6px;
   border: 1px solid #3a3a3a !important;
   border-radius: 3px;
-  background: #222 !important;
+  background: #1a1a1a !important;
   color: #ddd !important;
   font-size: 0.85em;
   font-family: inherit;
@@ -892,7 +1091,7 @@ body.sb-presenting #notifications {
   color: #fff;
 }
 
-/* ─── Thumbnail Preview ─── */
+/* ─── Thumbnail Preview (fallback for non-row context) ─── */
 
 .sb-thumbnail-preview {
   margin-top: 4px;
@@ -968,7 +1167,7 @@ body.sb-presenting #notifications {
 
 .sb-field-row {
   display: flex;
-  gap: 8px;
+  gap: 10px;
 }
 
 .sb-field-group {

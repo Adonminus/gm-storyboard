@@ -4,7 +4,7 @@
  * Requires: socketlib
  */
 
-const MODULE_ID = "sand-storyboard";
+const MODULE_ID = "gm-storyboard";
 
 /* ═══════════════════════════════════════════
    State
@@ -89,9 +89,23 @@ Hooks.once("socketlib.ready", () => {
   socket.register("getPresentation", _onGetPresentation);
 });
 
-Hooks.once("ready", () => {
+Hooks.once("ready", async () => {
   if (!game.modules.get("socketlib")?.active) {
     ui.notifications.error("GM Storyboard requires the socketlib module. Please enable it.");
+  }
+  // Migrate deck data from old "sand-storyboard" namespace
+  if (game.user.isGM) {
+    const oldSetting = game.settings.storage.get("world")?.find(s => s.key === "sand-storyboard.decks");
+    if (oldSetting) {
+      const oldData = oldSetting.value ?? {};
+      if (Object.keys(oldData).length) {
+        const newData = game.settings.get(MODULE_ID, "decks") || {};
+        const merged = Object.assign({}, newData, oldData);
+        await game.settings.set(MODULE_ID, "decks", merged);
+        await oldSetting.delete();
+        console.log("GM Storyboard | Migrated deck data from old namespace");
+      }
+    }
   }
   if (game.user.isGM) {
     game.sandStoryboard = {
@@ -930,6 +944,7 @@ class StoryboardEditor extends Application {
     this.currentDeckId = null;
     this.slides = [];
     this._expandedCaptions = new Set();
+    this._expandedSettings = new Set();
   }
 
   static get defaultOptions() {
@@ -946,6 +961,10 @@ class StoryboardEditor extends Application {
   /* ── Rendering ── */
 
   async _renderInner() {
+    // Save scroll position before re-render
+    const list = this.element?.find?.(".sb-slide-list");
+    if (list?.length) this._pendingScrollTop = list[0].scrollTop;
+
     await this._ensureDeck();
     const wrapper = document.createElement("div");
     wrapper.className = "sb-editor-body";
@@ -1083,10 +1102,9 @@ class StoryboardEditor extends Application {
         <button class="sb-deck-new" title="New storyboard"><i class="fas fa-plus"></i></button>
         <button class="sb-deck-rename" title="Rename"><i class="fas fa-pen"></i></button>
         <button class="sb-deck-delete" title="Delete"><i class="fas fa-trash"></i></button>
-      </div>
-      <div class="sb-toolbar sb-toolbar-top">
-        <button class="sb-add-image"><i class="fas fa-image"></i> Image Slide</button>
-        <button class="sb-add-html"><i class="fas fa-code"></i> HTML Slide</button>
+        <span class="sb-deck-bar-divider"></span>
+        <button class="sb-add-image" title="Add image slide"><i class="fas fa-image"></i></button>
+        <button class="sb-add-html" title="Add HTML slide"><i class="fas fa-code"></i></button>
       </div>
       <ol class="sb-slide-list">
         ${items || '<li class="sb-empty">No slides yet — add one above.</li>'}
@@ -1100,34 +1118,31 @@ class StoryboardEditor extends Application {
   _buildSlideItem(slide, idx) {
     _migrateSlide(slide);
     const isImage = slide.type === "image";
-    const transitionOpts = Object.entries(TRANSITIONS).map(([val, label]) =>
-      `<option value="${val}" ${slide.transition === val ? "selected" : ""}>${label}</option>`
-    ).join("");
-    const kenBurnsOpts = Object.entries(KEN_BURNS_OPTIONS).map(([val, label]) =>
-      `<option value="${val}" ${(slide.kenBurns || "none") === val ? "selected" : ""}>${label}</option>`
-    ).join("");
-    const particleOpts = Object.entries(AMBIENT_PARTICLE_OPTIONS).map(([val, label]) =>
-      `<option value="${val}" ${(slide.ambientParticles || "none") === val ? "selected" : ""}>${label}</option>`
-    ).join("");
 
     const contentField = isImage
-      ? `<div class="sb-image-field">
-           <input type="text" class="sb-field-content" data-idx="${idx}"
-             value="${_escapeHtml(slide.content)}"
-             placeholder="Click folder icon to browse..." />
-           <button class="sb-browse-btn" data-idx="${idx}" title="Browse files">
-             <i class="fas fa-folder-open"></i>
-           </button>
+      ? `<div class="sb-image-row">
+           <div class="sb-image-field">
+             <input type="text" class="sb-field-content" data-idx="${idx}"
+               value="${_escapeHtml(slide.content)}"
+               placeholder="Click folder icon to browse..." />
+             <button class="sb-browse-btn" data-idx="${idx}" title="Browse files">
+               <i class="fas fa-folder-open"></i>
+             </button>
+           </div>
+           <div class="sb-thumbnail-preview" data-idx="${idx}"
+             style="${slide.content ? "" : "display:none"}">
+             <img src="${_escapeHtml(slide.content)}" alt="preview" />
+           </div>
          </div>`
       : `<textarea class="sb-field-content" data-idx="${idx}" rows="3"
            placeholder="&lt;html&gt;...&lt;/html&gt;">${_escapeHtml(slide.content)}</textarea>`;
 
-    const thumbnailHtml = isImage
-      ? `<div class="sb-thumbnail-preview" data-idx="${idx}"
-           style="${slide.content ? "" : "display:none"}">
-           <img src="${_escapeHtml(slide.content)}" alt="preview" />
-         </div>`
-      : "";
+    const transitionOpts = Object.entries(TRANSITIONS).map(([val, label]) =>
+      `<option value="${val}" ${slide.transition === val ? "selected" : ""}>${label}</option>`
+    ).join("");
+
+    const settingsExpanded = this._expandedSettings.has(idx);
+    const settingsSummary = this._buildSettingsSummary(slide);
 
     return `
       <li class="sb-slide-item" data-idx="${idx}" draggable="true">
@@ -1142,12 +1157,18 @@ class StoryboardEditor extends Application {
             <i class="fas fa-trash"></i>
           </button>
         </div>
-        <div class="sb-slide-fields">
-          <label>${isImage ? "Image URL" : "HTML Content"}</label>
+        <div class="sb-slide-primary">
           ${contentField}
-          ${thumbnailHtml}
-          ${this._buildCaptionChain(slide, idx)}
-          <div class="sb-field-row">
+        </div>
+        ${this._buildCaptionChain(slide, idx)}
+        <div class="sb-slide-settings${settingsExpanded ? "" : " collapsed"}" data-idx="${idx}">
+          <div class="sb-slide-settings-header">
+            <span class="sb-slide-settings-toggle" data-idx="${idx}">
+              <i class="fas fa-chevron-right"></i>
+              Settings${settingsSummary ? `<span class="sb-settings-summary">${settingsSummary}</span>` : ""}
+            </span>
+          </div>
+          <div class="sb-slide-settings-body">
             <div class="sb-field-group">
               <label>Transition</label>
               <select class="sb-field-transition" data-idx="${idx}">
@@ -1156,19 +1177,13 @@ class StoryboardEditor extends Application {
             </div>
             ${isImage ? `<div class="sb-field-group">
               <label>Ken Burns</label>
-              <select class="sb-field-kenburns" data-idx="${idx}">
-                ${kenBurnsOpts}
-              </select>
+              ${this._buildKenBurnsPicker(slide, idx)}
             </div>` : ""}
             <div class="sb-field-group">
               <label>Ambient</label>
-              <select class="sb-field-particles" data-idx="${idx}">
-                ${particleOpts}
-              </select>
+              ${this._buildParticlesPicker(slide, idx)}
             </div>
-          </div>
-          <div class="sb-field-row">
-            <div class="sb-field-group" style="flex:3">
+            <div class="sb-field-group">
               <label>Audio</label>
               <div class="sb-audio-field${slide.audioContinue ? " sb-audio-dimmed" : ""}">
                 <input type="text" class="sb-field-audio" data-idx="${idx}"
@@ -1185,17 +1200,72 @@ class StoryboardEditor extends Application {
                 <span>Continue from previous slide</span>
               </label>
             </div>
-            <div class="sb-field-group" style="flex:1">
-              <label>Typewriter</label>
+            <div class="sb-field-group">
               <label class="sb-checkbox-label">
                 <input type="checkbox" class="sb-field-typewriter" data-idx="${idx}"
                   ${slide.typewriter ? "checked" : ""} />
-                <span>Enabled</span>
+                <span>Typewriter effect</span>
               </label>
             </div>
           </div>
         </div>
       </li>`;
+  }
+
+  _buildSettingsSummary(slide) {
+    const parts = [];
+    if (slide.transition && slide.transition !== "crossfade") {
+      parts.push(TRANSITIONS[slide.transition] || slide.transition);
+    }
+    if (slide.kenBurns && slide.kenBurns !== "none") {
+      parts.push(KEN_BURNS_OPTIONS[slide.kenBurns] || slide.kenBurns);
+    }
+    if (slide.ambientParticles && slide.ambientParticles !== "none") {
+      parts.push(AMBIENT_PARTICLE_OPTIONS[slide.ambientParticles] || slide.ambientParticles);
+    }
+    if (slide.audio) parts.push("Audio");
+    if (slide.typewriter) parts.push("Typewriter");
+    return parts.join(" \u00b7 ");
+  }
+
+  _buildKenBurnsPicker(slide, idx) {
+    const value = slide.kenBurns || "none";
+    const options = [
+      { val: "none", icon: "fa-ban", title: "None" },
+      { val: "zoom-in", icon: "fa-search-plus", title: "Slow Zoom In" },
+      { val: "zoom-out", icon: "fa-search-minus", title: "Slow Zoom Out" },
+      { val: "pan-left", icon: "fa-arrow-left", title: "Pan Left" },
+      { val: "pan-right", icon: "fa-arrow-right", title: "Pan Right" },
+      { val: "random", icon: "fa-random", title: "Random" }
+    ];
+    const buttons = options.map(o =>
+      `<button type="button" class="sb-icon-pick${value === o.val ? " active" : ""}"
+        data-value="${o.val}" title="${o.title}"><i class="fas ${o.icon}"></i></button>`
+    ).join("");
+    return `<div class="sb-icon-picker sb-picker-kenburns" data-idx="${idx}">
+      ${buttons}
+      <input type="hidden" class="sb-field-kenburns" data-idx="${idx}" value="${value}" />
+    </div>`;
+  }
+
+  _buildParticlesPicker(slide, idx) {
+    const value = slide.ambientParticles || "none";
+    const options = [
+      { val: "none", icon: "fa-ban", title: "None" },
+      { val: "snow", icon: "fa-snowflake", title: "Snow" },
+      { val: "rain", icon: "fa-cloud-rain", title: "Rain" },
+      { val: "embers", icon: "fa-fire", title: "Embers" },
+      { val: "dust", icon: "fa-wind", title: "Dust" },
+      { val: "fireflies", icon: "fa-star", title: "Fireflies" }
+    ];
+    const buttons = options.map(o =>
+      `<button type="button" class="sb-icon-pick${value === o.val ? " active" : ""}"
+        data-value="${o.val}" title="${o.title}"><i class="fas ${o.icon}"></i></button>`
+    ).join("");
+    return `<div class="sb-icon-picker sb-picker-particles" data-idx="${idx}">
+      ${buttons}
+      <input type="hidden" class="sb-field-particles" data-idx="${idx}" value="${value}" />
+    </div>`;
   }
 
   _buildCaptionChain(slide, idx) {
@@ -1313,11 +1383,23 @@ class StoryboardEditor extends Application {
       this.render(true);
     });
 
-    // Delete slide
+    // Delete slide (two-click confirm)
     html.find(".sb-delete-slide").on("click", e => {
-      this._syncFields();
-      this.slides.splice(Number(e.currentTarget.dataset.idx), 1);
-      this.render(true);
+      const btn = e.currentTarget;
+      if (btn.classList.contains("sb-confirm-armed")) {
+        this._syncFields();
+        this.slides.splice(Number(btn.dataset.idx), 1);
+        this.render(true);
+      } else {
+        btn.classList.add("sb-confirm-armed");
+        btn.innerHTML = '<i class="fas fa-check"></i> Confirm';
+        clearTimeout(btn._armTimer);
+        btn._armTimer = setTimeout(() => {
+          btn.classList.remove("sb-confirm-armed");
+          btn.innerHTML = '<i class="fas fa-trash"></i>';
+          btn.title = "Delete slide";
+        }, 2500);
+      }
     });
 
     // Field auto-save
@@ -1327,14 +1409,35 @@ class StoryboardEditor extends Application {
     html.find(".sb-field-transition").on("change", e => {
       this.slides[Number(e.currentTarget.dataset.idx)].transition = e.currentTarget.value;
     });
-    html.find(".sb-field-kenburns").on("change", e => {
-      this.slides[Number(e.currentTarget.dataset.idx)].kenBurns = e.currentTarget.value;
+    // Icon picker (Ken Burns + Particles)
+    html.find(".sb-icon-pick").on("click", e => {
+      const btn = e.currentTarget;
+      const picker = btn.closest(".sb-icon-picker");
+      const idx = Number(picker.dataset.idx);
+      const value = btn.dataset.value;
+      picker.querySelectorAll(".sb-icon-pick").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      const hidden = picker.querySelector("input[type=hidden]");
+      hidden.value = value;
+      if (picker.classList.contains("sb-picker-kenburns")) {
+        this.slides[idx].kenBurns = value;
+      } else if (picker.classList.contains("sb-picker-particles")) {
+        this.slides[idx].ambientParticles = value;
+      }
     });
     html.find(".sb-field-audio").on("change", e => {
       this.slides[Number(e.currentTarget.dataset.idx)].audio = e.currentTarget.value;
     });
-    html.find(".sb-field-particles").on("change", e => {
-      this.slides[Number(e.currentTarget.dataset.idx)].ambientParticles = e.currentTarget.value;
+    // Settings panel: collapse/expand toggle
+    html.find(".sb-slide-settings-toggle").on("click", e => {
+      const idx = Number(e.currentTarget.dataset.idx);
+      const panel = e.currentTarget.closest(".sb-slide-settings");
+      panel.classList.toggle("collapsed");
+      if (panel.classList.contains("collapsed")) {
+        this._expandedSettings.delete(idx);
+      } else {
+        this._expandedSettings.add(idx);
+      }
     });
     html.find(".sb-field-typewriter").on("change", e => {
       this.slides[Number(e.currentTarget.dataset.idx)].typewriter = e.currentTarget.checked;
@@ -1378,13 +1481,25 @@ class StoryboardEditor extends Application {
       this.render(true);
     });
 
-    // Caption chain: delete
+    // Caption chain: delete (two-click confirm)
     html.find(".sb-delete-caption").on("click", e => {
-      this._syncFields();
-      const idx = Number(e.currentTarget.dataset.idx);
-      const cidx = Number(e.currentTarget.dataset.cidx);
-      this.slides[idx].captions.splice(cidx, 1);
-      this.render(true);
+      const btn = e.currentTarget;
+      if (btn.classList.contains("sb-confirm-armed")) {
+        this._syncFields();
+        const idx = Number(btn.dataset.idx);
+        const cidx = Number(btn.dataset.cidx);
+        this.slides[idx].captions.splice(cidx, 1);
+        this.render(true);
+      } else {
+        btn.classList.add("sb-confirm-armed");
+        btn.innerHTML = '<i class="fas fa-check"></i>';
+        clearTimeout(btn._armTimer);
+        btn._armTimer = setTimeout(() => {
+          btn.classList.remove("sb-confirm-armed");
+          btn.innerHTML = '<i class="fas fa-times"></i>';
+          btn.title = "Remove caption";
+        }, 2500);
+      }
     });
 
     // Caption chain: move up
@@ -1427,6 +1542,13 @@ class StoryboardEditor extends Application {
 
     // Drag-and-drop
     this._initDragDrop(html);
+
+    // Restore scroll position after re-render
+    if (this._pendingScrollTop != null) {
+      const list = html.find(".sb-slide-list");
+      if (list.length) list[0].scrollTop = this._pendingScrollTop;
+      this._pendingScrollTop = null;
+    }
   }
 
   /* ── Drag & drop ── */
